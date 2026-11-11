@@ -1,13 +1,15 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { Header, Notice, errorMessage } from '../components/ui/shared'
+import { Header, Loading, Notice, errorMessage } from '../components/ui/shared'
 import { TeaHero } from '../components/ui/TeaHero'
 import { useOnline } from '../features/attendance/browser'
 import { displayDate, displayTime, todayWib } from '../features/attendance/dates'
 import type { Attendance, Employee, Store } from '../features/attendance/types'
 import { loadDashboard } from '../features/owner/api'
-import { AttendanceDetail } from '../features/owner/AttendanceDetail'
-import { EmployeeManager } from '../features/owner/EmployeeManager'
+import { Dialog } from '../components/ui/Dialog'
+
+const AttendanceDetail = lazy(() => import('../features/owner/AttendanceDetail').then(module => ({ default: module.AttendanceDetail })))
+const EmployeeManager = lazy(() => import('../features/owner/EmployeeManager').then(module => ({ default: module.EmployeeManager })))
 
 const statIcons = {
   total: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m20 0v-2a4 4 0 0 0-3-4M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0Zm5-4a4 4 0 0 1 0 8',
@@ -64,7 +66,8 @@ export default function OwnerDashboardPage({ onLogout }: { onLogout: () => Promi
     && (!storeFilter || byEmployee.has(employee.id) || (employee.storeId === storeFilter && !hasOtherRecord.has(employee.id))))
   const checkedIn = active.filter((employee) => byEmployee.has(employee.id)).length
   const completed = active.filter((employee) => byEmployee.get(employee.id)?.checkOut).length
-  const visible = employees.filter((employee) => active.includes(employee) || byEmployee.has(employee.id))
+  const activeIds = new Set(active.map(employee => employee.id))
+  const visible = employees.filter(employee => activeIds.has(employee.id) || byEmployee.has(employee.id))
   const stats = [
     ['Total Karyawan Aktif', active.length, 'total'],
     ['Sudah Masuk', checkedIn, 'in'],
@@ -163,8 +166,16 @@ export default function OwnerDashboardPage({ onLogout }: { onLogout: () => Promi
           <Link to="/" className="button button-quiet">Buka Halaman Absensi</Link>
         </footer>
       </main>
-      {detail && <AttendanceDetail employee={detail} date={date} record={byEmployee.get(detail.id)} onClose={() => setDetail(null)} />}
-      {managing && <EmployeeManager employees={employees} stores={stores} onChange={refresh} onClose={() => setManaging(false)} />}
+      {detail && <Suspense fallback={<Dialog title="Detail Absensi" onClose={() => setDetail(null)}>
+        <Loading label="Memuat detail absensi…" />
+      </Dialog>}>
+        <AttendanceDetail employee={detail} date={date} record={byEmployee.get(detail.id)} onClose={() => setDetail(null)} />
+      </Suspense>}
+      {managing && <Suspense fallback={<Dialog title="Kelola Karyawan" onClose={() => setManaging(false)}>
+        <Loading label="Memuat pengelolaan karyawan…" />
+      </Dialog>}>
+        <EmployeeManager employees={employees} stores={stores} onChange={refresh} onClose={() => setManaging(false)} />
+      </Suspense>}
     </>
   )
 }

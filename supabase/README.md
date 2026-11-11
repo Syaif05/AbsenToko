@@ -91,6 +91,17 @@ Browser hanya menyimpan token sesi, identitas karyawan, dan waktu kedaluwarsa bi
 
 3. Gunakan frontend dari commit pembaruan toko. Bila Vercel terhubung ke GitHub dan deploy otomatis, selesaikan langkah Supabase segera agar pilihan toko dapat dimuat.
 4. Di dashboard, buka **Kelola Karyawan → Kelola Toko**. Buat toko, lalu pilih penempatannya saat tambah/edit karyawan. Karyawan tanpa toko belum muncul di pilihan absensi. Pemindahan mencabut sesi lama dan tidak memindahkan riwayat absensi.
-5. Untuk menetapkan PIN, buka **Edit → Ubah PIN** dan isi 6–12 angka, atau kosongkan untuk PIN acak. PIN baru ditampilkan sekali. PIN lama hanya disimpan sebagai hash dan tidak dapat dilihat kembali.
+5. Untuk menetapkan PIN, buka **Edit → Ubah PIN** dan isi 6–12 angka, atau kosongkan untuk PIN acak. PIN yang dibuat sebelum pembaruan Lihat PIN Aktif hanya tersedia sebagai hash. Ikuti langkah berikut untuk mengaktifkan penyimpanan PIN aktif terenkripsi.
 
 Uji migrasi di staging dengan [uji toko](tests/store_groups.sql). Uji membuat data sementara dan mengembalikannya dengan rollback.
+
+## Lihat dan salin PIN aktif
+
+1. Jalankan [migrasi PIN aktif](migrations/20261111061533_owner_current_pin.sql) di **Supabase → SQL Editor** setelah migrasi toko.
+2. Buat kunci khusus dengan `openssl rand -hex 32`. Simpan hasilnya sebagai `OWNER_PIN_ENCRYPTION_KEY` di **Edge Functions → Secrets**. Simpan cadangan kunci di pengelola rahasia. Mengganti atau kehilangan kunci membuat salinan yang sudah disimpan tidak dapat dibuka.
+3. Deploy ulang `owner-api` dari folder proyek terbaru, lalu deploy frontend. Login karyawan tetap memeriksa hash PIN melalui `attendance-api`.
+
+   ```sh
+   npx supabase@3.1.0 functions deploy owner-api --remote=PROJECT_REF --use-api
+   ```
+4. Di **Kelola Karyawan → Edit**, gunakan **Lihat PIN** dan **Salin Nama dan PIN**. Untuk akun dengan PIN yang dibuat sebelum pembaruan, gunakan **Ubah PIN** satu kali. PIN baru disimpan bersama salinan terenkripsi, dan pembukaannya dicatat di audit Owner.

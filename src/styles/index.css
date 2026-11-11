@@ -351,3 +351,45 @@ input::placeholder { color: #52655b; opacity: 1; }
   .tea-shell-capture { align-items: start; }
   .tea-shell-capture > .tea-hero { align-self: start; }
 }
+
+.coordinate-link {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: .35rem;
+  color: var(--green-dark);
+  text-decoration: underline;
+  text-underline-offset: .2em;
+}
+.evidence-data .evidence-coordinate { align-items: center; }
+.employee-manager { max-width: 680px; }
+.employee-manager .sheet-heading h2 { font-size: 1.4rem; }
+.manager-toolbar, .manager-filters { display: grid; gap: .65rem; }
+.manager-count { margin: .05rem 0; }
+.manager-people { display: grid; gap: .5rem; }
+.manager-people li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: .65rem;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: #f7f8ee;
+  padding: .65rem;
+}
+.manager-person { min-width: 0; overflow-wrap: anywhere; }
+.manager-person .status { margin-top: .25rem; }
+.manager-empty { padding: 1rem; text-align: center; background: var(--paper); border-radius: .85rem; }
+.manager-pin { display: grid; gap: .45rem; text-align: center; padding: 1rem; border-radius: 1rem; background: var(--paper); }
+.manager-pin .issued-pin { font-size: clamp(1rem, 4.5vw, 1.7rem); overflow-wrap: anywhere; }
+.employee-manager textarea {
+  width: 100%;
+  padding: .65rem;
+  border: 1px solid var(--border);
+  border-radius: .7rem;
+  font-size: 1rem;
+}
+@media (min-width: 520px) {
+  .manager-toolbar { grid-template-columns: 1fr auto; }
+  .manager-filters { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
+}

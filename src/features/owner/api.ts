@@ -99,3 +99,5 @@ export const setEmployeeActive = (id: string, active: boolean) => invoke(active 
 export const resetEmployeePin = (id: string, pin?: string) => invoke<{ pin: string }>('reset_pin', id, { pin })
 
 export const saveStore = (id: string, name: string, creating: boolean) => invoke(creating ? 'create_store' : 'rename_store', id, { name })
+
+export const viewEmployeePin = (id: string) => invoke<{ pin: string | null }>('view_pin', id)

@@ -20,9 +20,10 @@ function EvidenceCard({ title, evidence }: { title: string; evidence?: Evidence 
     return () => controller.abort()
   }, [id, retry])
   const location = evidence?.location
-  const coordinates = location && validLocation(location)
-    ? location.latitude.toFixed(6) + ', ' + location.longitude.toFixed(6)
-    : null
+  const map = location && validLocation(location) ? {
+    label: location.latitude.toFixed(6) + ', ' + location.longitude.toFixed(6),
+    url: 'https://www.google.com/maps?q=' + encodeURIComponent(location.latitude + ',' + location.longitude),
+  } : null
   return (
     <section className="evidence-card">
       <h3>{title}</h3>
@@ -41,17 +42,18 @@ function EvidenceCard({ title, evidence }: { title: string; evidence?: Evidence 
           )}
           <dl className="evidence-data">
             <div><dt>Waktu</dt><dd>{displayTime(evidence.at)} WIB</dd></div>
-            {coordinates && location && (
+            {map && location && (
               <>
-                <div><dt>Koordinat</dt><dd>{coordinates}</dd></div>
+                <div className="evidence-coordinate"><dt>Koordinat</dt><dd>
+                  <a className="coordinate-link" href={map.url} target="_blank" rel="noopener noreferrer"
+                    aria-label={map.label + ' di Google Maps (tab baru)'}>
+                    {map.label} <span aria-hidden="true">↗</span>
+                  </a>
+                </dd></div>
                 <div><dt>Akurasi</dt><dd>±{Math.round(location.accuracy)} m</dd></div>
               </>
             )}
           </dl>
-          {coordinates && location && (
-            <a className="button button-secondary w-full" href={'https://www.google.com/maps?q=' + encodeURIComponent(location.latitude + ',' + location.longitude)}
-              target="_blank" rel="noopener noreferrer">Buka Google Maps <span aria-hidden="true">↗</span></a>
-          )}
         </>
       ) : <p className="muted">Belum ada catatan.</p>}
     </section>

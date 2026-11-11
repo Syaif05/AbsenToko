@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link } from 'react-router'
 import { AttendanceStatus } from '../components/AttendanceStatus'
 import { EmployeeSelector } from '../components/EmployeeSelector'
 import { Header, Loading, Notice, errorMessage } from '../components/ui/shared'
 import { TeaHero } from '../components/ui/TeaHero'
-import { EvidenceForm } from '../features/attendance/EvidenceForm'
 import { useOnline } from '../features/attendance/browser'
 import { displayDate, displayTime, todayWib } from '../features/attendance/dates'
 import { actionLabels } from '../features/attendance/types'
@@ -14,6 +13,8 @@ import { demoPin } from '../features/demo/store'
 import { demoMode, endAccount, forgetAccount, listEmployees, listStores, readSavedAccount, refreshStatus,
   saveAccount, savedAccountKey, SessionEnded, verifyEmployee } from '../features/attendance/api'
 import type { Account } from '../features/attendance/api'
+
+const EvidenceForm = lazy(() => import('../features/attendance/EvidenceForm').then(module => ({ default: module.EvidenceForm })))
 
 type EmployeeList =
   | { kind: 'loading' }
@@ -48,6 +49,7 @@ export default function AttendancePage() {
   const pageHeading = useRef<HTMLHeadingElement>(null)
   const formHeading = useRef<HTMLHeadingElement>(null)
   const stage = action ? 'capture' : confirmation ? 'confirmation' : account ? 'status' : 'selection'
+  const focusCaptureHeading = useCallback((element: HTMLHeadingElement | null) => { element?.focus() }, [])
   const previousStage = useRef(stage)
 
   useEffect(() => {
@@ -213,7 +215,10 @@ export default function AttendancePage() {
         <div className="tea-workspace">
           {!online && <Notice tone="warning">Koneksi internet diperlukan untuk mengirim absensi.</Notice>}
           {action && session ? (
-            <EvidenceForm session={session} action={action} headingRef={formHeading} onBack={() => { setStatus(null); setAction(null) }} onSuccess={confirm} />
+            <Suspense fallback={<section className="panel"><Loading label="Menyiapkan bukti absensi…" /></section>}>
+              <EvidenceForm session={session} action={action} headingRef={focusCaptureHeading}
+                onBack={() => { setStatus(null); setAction(null) }} onSuccess={confirm} />
+            </Suspense>
           ) : confirmation ? (
             <section className="panel stack success-panel">
               <div className="success-mark" aria-hidden="true">✓</div>

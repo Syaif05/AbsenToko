@@ -30,7 +30,7 @@ Bangun website absensi **sangat sederhana, cepat, aman, mobile-first**. Karyawan
 | Peran | Akses | Larangan |
 | --- | --- | --- |
 | Karyawan | Memilih identitas dari daftar terbatas, verifikasi PIN, melihat status absensi hariannya setelah verifikasi, mengirim foto/GPS untuk masuk dan pulang | Tidak boleh membaca PIN/hash, foto atau riwayat karyawan lain, mengedit waktu, mengubah bukti, melihat dashboard Owner |
-| Owner | Login email/password, melihat rekap dan detail kehadiran, filter tanggal, menambah/edit/nonaktifkan karyawan, me-reset PIN melalui alur aman | Tidak boleh memperoleh PIN plaintext lama; semua tindakan manajemen tervalidasi di server |
+| Owner | Login email/password, melihat rekap dan detail kehadiran, filter tanggal, menambah/edit/nonaktifkan karyawan, mengatur dan melihat PIN aktif melalui alur aman | Akses PIN aktif hanya untuk Owner, diaudit, dan tervalidasi di server |
 
 **Asumsi MVP:** Satu usaha, satu zona waktu operasional **Asia/Jakarta (WIB)**, satu Owner utama, kurang lebih 2–30 karyawan; desain database tidak mengunci kemungkinan perluasan. Tidak ada pendaftaran Owner publik. Owner dibuat melalui proses administrasi aman. Jangan membuat akun Owner dengan password hard-coded.
 
@@ -134,7 +134,7 @@ Gunakan UUID dan constraint database. Simpan semua timestamp sebagai `timestampt
 | `is_active` | boolean NOT NULL DEFAULT true |
 | `created_at`, `updated_at` | timestamptz |
 
-**PIN:** Hindari PIN 4 digit lemah tanpa mitigasi. Rekomendasi PIN numerik minimal 6 digit acak atau passcode yang lebih kuat; reset menghasilkan PIN baru, hanya ditampilkan sekali kepada Owner. Terapkan pembatasan percobaan per identitas dan sumber, cooldown, dan audit minimal tanpa menyimpan PIN. Jangan membolehkan Owner melihat PIN lama.
+**PIN:** Hindari PIN 4 digit lemah tanpa mitigasi. Rekomendasi PIN numerik minimal 6 digit acak atau passcode yang lebih kuat; PIN aktif yang ditetapkan lewat fitur baru dapat dilihat dan disalin oleh Owner. Simpan hanya hash untuk verifikasi dan salinan PIN aktif terenkripsi dengan kunci di secret manager; hapus salinan sebelumnya saat PIN berubah. Batasi dan audit setiap pembukaan PIN aktif tanpa menyimpan nilainya di log. Terapkan pembatasan percobaan per identitas dan sumber serta cooldown.
 
 ### 6.2 `attendance`
 

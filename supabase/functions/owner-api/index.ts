@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.99.2'
 import { hashPin, verifyPin } from '../_shared/pin.ts'
+import { importPinKey, openPin, sealPin } from './pin-envelope.ts'
 
 const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
   auth: { persistSession: false, autoRefreshToken: false },
@@ -67,7 +68,7 @@ Deno.serve(async request => {
       return respond({ url: signed.data.signedUrl })
     }
 
-    if (!['create', 'rename', 'activate', 'deactivate', 'reset_pin', 'create_store', 'rename_store'].includes(operation)) {
+    if (!['create', 'rename', 'activate', 'deactivate', 'reset_pin', 'view_pin', 'create_store', 'rename_store'].includes(operation)) {
       return respond({ error: 'Operasi tidak valid.' }, 400)
     }
     const name = typeof body.name === 'string' ? body.name.trim() : ''
@@ -78,9 +79,22 @@ Deno.serve(async request => {
       (typeof body.store_id !== 'string' || !uuid.test(body.store_id))) return respond({ error: 'Toko tidak valid.' }, 400)
     if (operation === 'reset_pin' && body.pin !== undefined &&
       (typeof body.pin !== 'string' || !/^\d{6,12}$/.test(body.pin))) return respond({ error: 'PIN harus terdiri dari 6–12 angka.' }, 400)
-    const limited = await admin.rpc('attendance_take_limit', { p_key: 'owner-write:' + user.id, p_limit: 20, p_seconds: 60 })
+    const rateScope = operation === 'view_pin' ? 'owner-read-pin:' : 'owner-write:'
+    const limited = await admin.rpc('attendance_take_limit', { p_key: rateScope + user.id, p_limit: 20, p_seconds: 60 })
     if (limited.error) return respond({ error: 'Layanan belum tersedia.' }, 503)
     if (!limited.data) return respond({ error: 'Terlalu banyak perubahan. Coba lagi sebentar.' }, 429)
+    const needsPinKey = ['create', 'reset_pin', 'view_pin'].includes(operation)
+    const pinKey = needsPinKey
+      ? await importPinKey(Deno.env.get('OWNER_PIN_ENCRYPTION_KEY') ?? '').catch(() => null)
+      : null
+    if (needsPinKey && !pinKey) return respond({ error: 'Kunci penyimpanan PIN belum dikonfigurasi.' }, 503)
+
+    if (operation === 'view_pin' && pinKey) {
+      const { data, error } = await admin.rpc('owner_read_employee_pin', { p_owner: user.id, p_id: id })
+      if (error) return respond({ error: 'PIN belum bisa dimuat.' }, 503)
+      return respond({ pin: data ? await openPin(pinKey, id, data) : null })
+    }
+
     let previousHash: string | null = null
     if (operation === 'reset_pin') {
       const { data, error } = await admin.from('employees').select('pin_hash').eq('id', id).maybeSingle()
@@ -98,10 +112,13 @@ Deno.serve(async request => {
         do { pin = newPin() } while (previousHash && await verifyPin(pin, previousHash))
       }
     }
-    const result = await admin.rpc('owner_manage_store_assignment', {
+    const args = {
       p_owner: user.id, p_id: id, p_store: body.store_id ?? null, p_operation: operation, p_name: name || null,
       p_pin_hash: pin ? await hashPin(pin) : null, p_previous_hash: previousHash,
-    })
+    }
+    const result = pin && pinKey
+      ? await admin.rpc('owner_set_recoverable_employee_pin', { ...args, p_envelope: await sealPin(pinKey, id, pin) })
+      : await admin.rpc('owner_manage_store_assignment', args)
     if (result.error) {
       return respond({ error: operation === 'create' && result.error.code === '23505'
         ? 'Karyawan mungkin sudah tersimpan. Perbarui daftar dan reset PIN bila diperlukan.'
