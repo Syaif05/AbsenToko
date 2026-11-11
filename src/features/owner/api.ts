@@ -26,6 +26,15 @@ export async function requestPasswordReset(email: string) {
   const { error } = await client().auth.resetPasswordForEmail(email.trim(), {
     redirectTo: new URL('/owner/reset', window.location.origin).href,
   })
+  if (error?.code === 'over_email_send_rate_limit') {
+    throw new Error('Batas pengiriman email Supabase tercapai. Tunggu sebelum meminta tautan baru.')
+  }
+  if (error?.status === 429 || error?.code === 'over_request_rate_limit') {
+    throw new Error('Terlalu banyak permintaan reset. Tunggu sebelum mencoba lagi.')
+  }
+  if (error?.code === 'email_address_not_authorized') {
+    throw new Error('Layanan email Supabase belum mengizinkan pengiriman ke alamat ini. Hubungi admin proyek.')
+  }
   if (error) throw new Error('Permintaan reset belum berhasil. Coba lagi.')
 }
 

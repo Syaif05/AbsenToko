@@ -2,7 +2,7 @@ begin;
 
 -- Retain failed intents until the Storage cleanup confirms removal.
 -- Completed intents are temporary receipts, separate from attendance evidence.
-create function public.attendance_prune_technical_data()
+create or replace function public.attendance_prune_technical_data()
 returns void language plpgsql security definer set search_path = '' as $$
 begin
   delete from attendance_private.upload_intents
