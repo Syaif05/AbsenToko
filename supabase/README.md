@@ -141,7 +141,7 @@ Area Owner memakai navigasi bersama, filter riwayat toko, dan ID permintaan untu
 
 Urutan pemasangan setelah pengujian staging dan persetujuan produksi
 
-1. Terapkan `20261111140941_owner_reliability.sql` pada skema yang telah memiliki migrasi absensi langsung. Migrasi menambah tabel tanda terima transaksi privat dan RPC `owner_apply_change`. Riwayat migrasi produksi sebelumnya kosong, sehingga periksa skema awal sebelum memakai perintah push seluruh migrasi.
+1. Terapkan `20261111142702_owner_reliability.sql` pada skema yang telah memiliki migrasi absensi langsung. Migrasi menambah tabel tanda terima transaksi privat dan RPC `owner_apply_change`. Riwayat migrasi produksi sebelumnya kosong, sehingga periksa skema awal sebelum memakai perintah push seluruh migrasi.
 2. Jalankan `supabase/tests/owner_reliability.sql` di staging. Pengujian membatalkan fixture melalui rollback dan memeriksa replay, konflik payload, kegagalan atomik, serta izin.
 3. Pasang ulang `owner-api`, kemudian frontend. Function baru kompatibel dengan klien lama melalui ID permintaan yang dibuat server. Jaminan retry dengan ID sama memerlukan frontend baru.
 4. Uji memakai akun Owner staging, termasuk login, tambah/edit/arsip, unggah jadwal, dan detail foto. Hasil browser dengan respons simulasi hanya memverifikasi UI dan kontrak respons.
