@@ -117,7 +117,11 @@ export default function OwnerDashboardPage({ onLogout }: { onLogout: () => Promi
           <p className="tea-eyebrow"><span aria-hidden="true" />Ruang Owner</p>
           <h1>Dashboard</h1>
           <p className="tea-date">{displayDate(date)} · WIB</p>
+          <nav className="manage-actions" aria-label="Menu Owner">
+          <Link className="button hero-action" to="/owner/jadwal">Jadwal Karyawan</Link>
+          <Link className="button hero-action" to="/owner/pengaturan">Pengaturan</Link>
           <button className="button hero-action" type="button" disabled={!snapshot || !online} onClick={() => setManaging(true)}>Kelola Karyawan</button>
+          </nav>
         </TeaHero>
         <section className="stats" aria-label="Ringkasan absensi karyawan aktif">
           {stats.map(([label, value, tone]) => (

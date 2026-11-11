@@ -32,7 +32,8 @@ export function App() {
     <BrowserRouter>
       <Suspense fallback={<><Header /><main className="narrow-shell"><Loading label="Memuat halaman…" /></main></>}>
         <Routes>
-          <Route path="/" element={<AttendancePage />} />
+          <Route path="/" element={<AttendancePage key="attendance" />} />
+          <Route path="/aktivasi" element={<AttendancePage key="activation" />} />
           <Route path="/owner/*" element={<OwnerRoutes />} />
           <Route path="*" element={<NotFound />} />
         </Routes>

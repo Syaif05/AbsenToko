@@ -4,15 +4,15 @@ import { Dialog } from '../../components/ui/Dialog'
 import { Notice, errorMessage } from '../../components/ui/shared'
 import { useOnline } from '../attendance/browser'
 import type { Employee, Store } from '../attendance/types'
-import { createEmployee, renameEmployee, resetEmployeePin, saveStore, setEmployeeActive, viewEmployeePin } from './api'
+import { createEmployee, renameEmployee, inviteEmployee, saveStore, setEmployeeActive } from './api'
 
 type Screen =
   | { kind: 'list' }
   | { kind: 'stores' }
-  | { kind: 'profile'; employee: Employee; pin?: string }
+  | { kind: 'profile'; employee: Employee }
   | { kind: 'edit'; employee?: Employee }
-  | { kind: 'confirm'; employee: Employee; action: 'reset' | 'toggle' }
-  | { kind: 'pin'; name: string; pin: string }
+  | { kind: 'confirm'; employee: Employee; action: 'invite' | 'toggle' }
+  | { kind: 'link'; name: string; url: string }
 
 export function EmployeeManager({ employees, stores, onChange, onClose }: {
   employees: Employee[]; stores: Store[]; onChange: () => void; onClose: () => void
@@ -22,22 +22,18 @@ export function EmployeeManager({ employees, stores, onChange, onClose }: {
   const inFlight = useRef(false)
   const [query, setQuery] = useState('')
   const [filterStore, setFilterStore] = useState('')
-  const [pinUnavailable, setPinUnavailable] = useState(false)
   const [copyFallback, setCopyFallback] = useState(false)
   const [name, setName] = useState('')
   const [storeId, setStoreId] = useState('')
   const [storeName, setStoreName] = useState('')
   const [editingStore, setEditingStore] = useState('')
-  const [newPin, setNewPin] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const online = useOnline()
 
   function go(next: Screen) {
-    setNewPin('')
     setCopyFallback(false)
-    setPinUnavailable(false)
     setScreen(next)
     setError('')
     setMessage('')
@@ -74,8 +70,9 @@ export function EmployeeManager({ employees, stores, onChange, onClose }: {
     void run(async () => {
       if (!id) {
         creationId.current ??= crypto.randomUUID()
-        const { pin } = await createEmployee(creationId.current, name, storeId || null)
-        go({ kind: 'pin', name: name.trim(), pin })
+        await createEmployee(creationId.current, name, storeId || null)
+        go({ kind: 'list' })
+        setMessage('Karyawan ditambahkan. Buka profilnya untuk membuat tautan aktivasi.')
       } else {
         await renameEmployee(id, name, storeId || null)
         go({ kind: 'list' })
@@ -88,9 +85,11 @@ export function EmployeeManager({ employees, stores, onChange, onClose }: {
     if (screen.kind !== 'confirm') return
     const { employee, action } = screen
     void run(async () => {
-      if (action === 'reset') {
-        const { pin } = await resetEmployeePin(employee.id, newPin || undefined)
-        go({ kind: 'profile', employee, pin })
+      if (action === 'invite') {
+        const { invitation } = await inviteEmployee(employee.id)
+        const url = new URL('/aktivasi', location.origin)
+        url.hash = 'aktivasi=' + invitation
+        go({ kind: 'link', name: employee.name, url: url.href })
       } else {
         await setEmployeeActive(employee.id, !employee.active)
         go({ kind: 'list' })
@@ -99,22 +98,11 @@ export function EmployeeManager({ employees, stores, onChange, onClose }: {
     })
   }
 
-  function revealPin(employee: Employee) {
-    void run(async () => {
-      const { pin } = await viewEmployeePin(employee.id)
-      if (!pin) {
-        setPinUnavailable(true)
-        return
-      }
-      go({ kind: 'profile', employee, pin })
-    }, false)
-  }
-
-  async function copyPin(text: string) {
+  async function copyLink(text: string) {
     setMessage('')
     try {
       await navigator.clipboard.writeText(text)
-      setMessage('Nama dan PIN disalin.')
+      setMessage('Tautan aktivasi disalin.')
     } catch {
       setCopyFallback(true)
     }
@@ -126,13 +114,9 @@ export function EmployeeManager({ employees, stores, onChange, onClose }: {
     (!filterStore || (employee.storeId ?? 'unassigned') === filterStore)
     && employee.name.toLocaleLowerCase('id').includes(search),
   ) : []
-  const pinText = screen.kind === 'profile' && screen.pin
-    ? `Nama Karyawan: ${screen.employee.name}\nToko: ${storeNames.get(screen.employee.storeId ?? '') ?? 'Belum ditempatkan'}\nPIN Absensi: ${screen.pin}`
-    : screen.kind === 'pin' ? `Nama Karyawan: ${screen.name}\nPIN Absensi: ${screen.pin}` : ''
-
   const title = screen.kind === 'profile' ? 'Profil Karyawan' : screen.kind === 'edit' ? (screen.employee ? 'Edit Karyawan' : 'Tambah Karyawan')
-    : screen.kind === 'pin' ? 'PIN Karyawan'
-      : screen.kind === 'confirm' ? (screen.action === 'reset' ? 'Ubah PIN' : screen.employee.active ? 'Nonaktifkan Karyawan' : 'Aktifkan Karyawan')
+    : screen.kind === 'link' ? 'Tautan Aktivasi'
+      : screen.kind === 'confirm' ? (screen.action === 'invite' ? 'Buat Tautan Aktivasi' : screen.employee.active ? 'Nonaktifkan Karyawan' : 'Aktifkan Karyawan')
         : screen.kind === 'stores' ? 'Kelola Toko' : 'Kelola Karyawan'
 
   return (
@@ -140,7 +124,6 @@ export function EmployeeManager({ employees, stores, onChange, onClose }: {
       <div className="stack">
         {!online && <Notice tone="warning">Periksa koneksi internet untuk menyimpan perubahan.</Notice>}
         {error && <Notice tone="error">{error}</Notice>}
-        {pinUnavailable && <Notice tone="warning">PIN ini belum bisa ditampilkan. Pilih Ubah PIN untuk menetapkan PIN aktif yang bisa dilihat kembali.</Notice>}
         {message && <Notice tone="success">{message}</Notice>}
         {screen.kind === 'list' && (
           <>
@@ -181,18 +164,15 @@ export function EmployeeManager({ employees, stores, onChange, onClose }: {
           </>
         )}
         {screen.kind === 'profile' && <>
-          <div className="manager-pin">
+          <div className="manager-profile">
             <h3>{screen.employee.name}</h3>
             <p>{storeNames.get(screen.employee.storeId ?? '') ?? 'Belum ditempatkan'}</p>
             <p className="muted">{screen.employee.active ? 'Aktif' : 'Nonaktif'}</p>
-            {screen.pin ? <output className="issued-pin" aria-label="PIN aktif">{screen.pin}</output> : <p>PIN disembunyikan</p>}
           </div>
-          {screen.pin ? <button className="button button-secondary" onClick={() => void copyPin(pinText)}>Salin Nama dan PIN</button>
-            : <button className="button button-secondary" disabled={busy || !online} onClick={() => revealPin(screen.employee)}>Lihat PIN</button>}
-          {copyFallback && <label className="field">Salin teks secara manual
-            <textarea readOnly rows={3} value={pinText} onFocus={event => event.currentTarget.select()} />
-          </label>}
-          <button className="button button-primary" disabled={busy} onClick={() => edit(screen.employee)}>Edit Profil / Ubah PIN</button>
+          <button className="button button-primary" disabled={busy || !online || !screen.employee.active || !screen.employee.storeId}
+            onClick={() => go({ kind: 'confirm', employee: screen.employee, action: 'invite' })}>Buat Tautan Aktivasi</button>
+          {!screen.employee.storeId && <Notice>Tentukan toko karyawan terlebih dahulu.</Notice>}
+          <button className="button button-secondary" disabled={busy} onClick={() => edit(screen.employee)}>Edit Profil</button>
           <button className="button button-quiet" disabled={busy} onClick={() => go({ kind: 'list' })}>Kembali</button>
         </>}
         {screen.kind === 'stores' && <>
@@ -229,18 +209,12 @@ export function EmployeeManager({ employees, stores, onChange, onClose }: {
                   {stores.map(store => <option key={store.id} value={store.id}>{store.name}</option>)}
                 </select>
               </label>
-              {!screen.employee && <p className="muted">PIN awal dibuat otomatis setelah karyawan ditambahkan.</p>}
               <button className="button button-primary w-full" disabled={busy || !online || !name.trim()} type="submit">
                 {busy ? 'Menyimpan…' : 'Simpan Karyawan'}
               </button>
             </form>
             {screen.employee && (
               <div className="manage-actions">
-                <button className="button button-secondary" type="button" disabled={busy || !online}
-                  onClick={() => { if (screen.employee) revealPin(screen.employee) }}>Lihat PIN</button>
-                <button className="button button-secondary" type="button" disabled={busy} onClick={() => {
-                  if (screen.employee) go({ kind: 'confirm', employee: screen.employee, action: 'reset' })
-                }}>Ubah PIN</button>
                 <button className={'button ' + (screen.employee.active ? 'button-danger' : 'button-secondary')} type="button" disabled={busy} onClick={() => {
                   if (screen.employee) go({ kind: 'confirm', employee: screen.employee, action: 'toggle' })
                 }}>{screen.employee.active ? 'Nonaktifkan' : 'Aktifkan'}</button>
@@ -253,34 +227,24 @@ export function EmployeeManager({ employees, stores, onChange, onClose }: {
           <>
             <p><strong>{screen.employee.name}</strong></p>
             <p className="muted">
-              {screen.action === 'reset' ? 'PIN lama akan berhenti berlaku. Bagikan PIN baru hanya kepada karyawan ini.' :
-                screen.employee.active ? 'Nama disembunyikan dari pilihan absensi. Riwayat tetap tersedia.' : 'Nama akan tersedia kembali untuk absensi.'}
+              {screen.action === 'invite' ? 'Tautan berlaku 24 jam dan hanya bisa dipakai sekali. Membuat tautan baru mengakhiri akses perangkat lama.'
+                : screen.employee.active ? 'Akses absensi akan dicabut. Riwayat tetap tersedia.' : 'Karyawan dapat menerima tautan aktivasi baru.'}
             </p>
-            {screen.action === 'reset' && <label className="field"><span>PIN baru (opsional)</span>
-              <input type="password" inputMode="numeric" autoComplete="off" maxLength={12} value={newPin}
-                disabled={busy} onChange={event => setNewPin(event.target.value.replace(/[^0-9]/g, ''))} />
-              <small>Kosongkan untuk membuat PIN acak. PIN lama tidak dapat dilihat.</small>
-            </label>}
             <button className="button button-primary w-full" type="button"
-              disabled={busy || !online || (screen.action === 'reset' && newPin.length > 0 && newPin.length < 6)} onClick={confirm}>
+              disabled={busy || !online} onClick={confirm}>
               {busy ? 'Menyimpan…' : title}
             </button>
             <button className="button button-quiet w-full" type="button" disabled={busy} onClick={() => edit(screen.employee)}>Batal</button>
           </>
         )}
-        {screen.kind === 'pin' && (
-          <>
-            <div className="manager-pin">
-              <strong>{screen.name}</strong>
-              <output className="issued-pin" aria-label="PIN aktif">{screen.pin}</output>
-            </div>
-            <button className="button button-secondary" type="button" onClick={() => void copyPin(pinText)}>Salin Nama dan PIN</button>
-            {copyFallback && <label className="field"><span>Salin teks secara manual</span>
-              <textarea rows={2} readOnly value={pinText} onFocus={event => event.currentTarget.select()} />
-            </label>}
-            <button className="button button-primary w-full" type="button" onClick={() => go({ kind: 'list' })}>Selesai</button>
-          </>
-        )}
+        {screen.kind === 'link' && <>
+          <p>Kirim tautan ini secara pribadi kepada <strong>{screen.name}</strong>.</p>
+          <button className="button button-primary" onClick={() => void copyLink(screen.url)}>Salin Tautan</button>
+          {copyFallback && <label className="field">Salin tautan secara manual
+            <textarea readOnly rows={3} value={screen.url} onFocus={event => event.currentTarget.select()} />
+          </label>}
+          <button className="button button-quiet" onClick={() => go({ kind: 'list' })}>Selesai</button>
+        </>}
       </div>
     </Dialog>
   )

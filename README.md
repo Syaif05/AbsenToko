@@ -1,3 +1,5 @@
+> Untuk versi Teh Idaman, gunakan [panduan aktivasi perangkat dan jadwal](supabase/README.md#aktivasi-perangkat-dan-jadwal). Bagian fase lama mendokumentasikan rilis sebelumnya.
+
 # Absen Toko
 
 Website absensi karyawan untuk satu usaha dengan zona waktu Asia/Jakarta. Lihat [AGENTS.md](AGENTS.md) untuk spesifikasi produk dan urutan implementasi.
@@ -22,7 +24,7 @@ npm run preview
 
 ## Demo karyawan
 
-Aktifkan `VITE_ATTENDANCE_MODE=demo` untuk mencoba halaman karyawan dengan PIN contoh **246810**. Pilih Alya untuk masuk, Bima untuk pulang, atau Citra untuk melihat status selesai. Perubahan demo tersimpan di memori tab.
+Aktifkan `VITE_ATTENDANCE_MODE=demo` untuk mencoba halaman karyawan. Pilih Alya untuk masuk, Bima untuk pulang, atau Citra untuk melihat status selesai. Perubahan demo tersimpan di memori tab.
 
 ## Setup Supabase Fase 2
 
@@ -39,10 +41,10 @@ Salin `.env.example` ke `.env.local` bila perlu mengubah nama aplikasi. URL dan 
 
 1. Jalankan migrasi Fase 2 dan 3, lalu pasang ulang Edge Function `attendance-api` dari kode terbaru sesuai [panduan Supabase](supabase/README.md). Versi ini menambahkan operasi `receipt`.
 2. Buat `.env.local` dari `.env.example` dan isi URL serta publishable key proyek. Masukkan origin frontend dalam `ALLOWED_ORIGINS` di Supabase.
-3. Jalankan `npm run dev` dan buka halaman karyawan. Gunakan karyawan uji yang sudah memiliki hash PIN di database staging.
+3. Jalankan `npm run dev` dan buka halaman karyawan. Untuk versi terkini, buat tautan aktivasi dari profil karyawan di dashboard Owner.
 4. Untuk mencoba alur demo Fase 1, atur `VITE_ATTENDANCE_MODE=demo` dan restart Vite. Mode default menggunakan API.
 
-Jika koneksi putus saat pengiriman, gunakan **Periksa dan Coba Lagi**. Aplikasi mencari hasil transaksi dengan ID percobaan yang sama sebelum mencoba mengirim kembali. Setelah sesi habis, verifikasi PIN kembali untuk membaca status terbaru.
+Jika koneksi putus saat pengiriman, gunakan **Periksa dan Coba Lagi**. Aplikasi mencari hasil transaksi dengan ID percobaan yang sama sebelum mencoba mengirim kembali. Setelah sesi perangkat habis, minta tautan aktivasi baru kepada Owner.
 
 
 ## Dashboard Owner Fase 5

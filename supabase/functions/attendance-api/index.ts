@@ -1,5 +1,4 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.99.2'
-import { verifyPin } from '../_shared/pin.ts'
 import jpeg from 'npm:jpeg-js@0.4.4'
 
 const required = (name: string) => {
@@ -25,7 +24,7 @@ class Failure extends Error {
 async function rpc(name: string, args: Record<string, unknown>) {
   const { data, error } = await client.rpc(name, args)
   if (error?.code === 'P0001' && error.message === 'invalid session') {
-    throw new Failure(401, 'Sesi berakhir. Masukkan PIN kembali.')
+    throw new Failure(401, 'Sesi berakhir. Minta tautan aktivasi baru kepada Owner.')
   }
   if (error) throw new Failure(409, 'Permintaan tidak dapat diproses. Periksa status absensi kembali.')
   return data
@@ -80,32 +79,23 @@ Deno.serve(async request => {
       : null
     if (sourceHash) await limit('source:' + sourceHash, 60, 60)
     const body = await boundedJson(request)
-    if (body.operation === 'stores') {
-      const { data, error } = await client.from('stores').select('id,name').order('name')
-      if (error) throw new Failure(503, 'Daftar toko belum tersedia.')
-      return respond({ stores: data })
-    }
-    if (body.operation === 'list') {
-      if (!uuid(body.store_id)) throw new Failure(400, 'Pilih toko terlebih dahulu.')
-      const { data, error } = await client.from('employees').select('id,name').eq('is_active', true).eq('store_id', body.store_id).order('name').limit(100)
-      if (error) throw new Failure(503, 'Daftar karyawan belum tersedia.')
-      return respond({ employees: data })
-    }
-    if (body.operation === 'verify') {
-      if (!uuid(body.store_id) || !uuid(body.employee_id) || typeof body.pin !== 'string' || !/^\d{6,12}$/.test(body.pin)) throw new Failure(400, 'Nama atau PIN tidak sesuai.')
-      await limit(sourceHash ? 'pin-source:' + sourceHash : 'pin-global', sourceHash ? 10 : 60, 60)
-      await limit('identity:' + body.employee_id.toLowerCase(), 5, 60)
-      const { data, error } = await client.from('employees').select('id,pin_hash').eq('id', body.employee_id).eq('store_id', body.store_id).eq('is_active', true).maybeSingle()
-      if (error) throw new Failure(503, 'Verifikasi belum tersedia.')
-      if (!data || !await verifyPin(body.pin, data.pin_hash)) throw new Failure(401, 'Nama atau PIN tidak sesuai.')
+    if (body.operation === 'activate') {
+      if (typeof body.invitation !== 'string' || !/^[0-9a-f]{64}$/.test(body.invitation)) {
+        throw new Failure(400, 'Tautan aktivasi tidak valid.')
+      }
       const token = hex(crypto.getRandomValues(new Uint8Array(32)).buffer)
-      const hash = await digest(encoder.encode(token))
-      const expires_at = await rpc('attendance_issue_store_session', { p_employee: data.id, p_hash: hash, p_pin_hash: data.pin_hash, p_store: body.store_id })
-      const state = await rpc('attendance_status', { p_hash: hash })
-      return respond({ token, expires_at, ...state })
+      const { data, error } = await client.rpc('employee_activate', {
+        p_invitation: await digest(encoder.encode(body.invitation)),
+        p_session: await digest(encoder.encode(token)),
+      })
+      if (error?.message === 'invalid invitation') {
+        throw new Failure(401, 'Tautan sudah dipakai, kedaluwarsa, atau tidak berlaku. Minta tautan baru kepada Owner.')
+      }
+      if (error || !data) throw new Failure(503, 'Aktivasi belum tersedia. Coba lagi.')
+      return respond({ token, ...data })
     }
     const token = request.headers.get('authorization')?.replace(/^Bearer /, '')
-    if (!token || !/^[0-9a-f]{64}$/.test(token)) throw new Failure(401, 'Verifikasi PIN diperlukan.')
+    if (!token || !/^[0-9a-f]{64}$/.test(token)) throw new Failure(401, 'Aktivasi perangkat diperlukan.')
     const hash = await digest(encoder.encode(token))
     await limit('session:' + hash, 30, 60)
     if (body.operation === 'status') return respond(await rpc('attendance_status', { p_hash: hash }))

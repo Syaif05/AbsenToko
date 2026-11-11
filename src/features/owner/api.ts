@@ -93,11 +93,57 @@ async function invoke<T>(operation: string, id: string, fields = {}, signal?: Ab
 }
 
 export const getPrivatePhoto = (id: string, signal: AbortSignal) => invoke<{ url: string }>('photo', id, {}, signal)
-export const createEmployee = (id: string, name: string, storeId: string | null) => invoke<{ pin: string }>('create', id, { name, store_id: storeId })
+export const createEmployee = (id: string, name: string, storeId: string | null) => invoke('create', id, { name, store_id: storeId })
 export const renameEmployee = (id: string, name: string, storeId: string | null) => invoke('rename', id, { name, store_id: storeId })
 export const setEmployeeActive = (id: string, active: boolean) => invoke(active ? 'activate' : 'deactivate', id)
-export const resetEmployeePin = (id: string, pin?: string) => invoke<{ pin: string }>('reset_pin', id, { pin })
 
 export const saveStore = (id: string, name: string, creating: boolean) => invoke(creating ? 'create_store' : 'rename_store', id, { name })
 
-export const viewEmployeePin = (id: string) => invoke<{ pin: string | null }>('view_pin', id)
+
+export const inviteEmployee = (id: string) => invoke<{ invitation: string }>('invite', id)
+
+export async function loadScheduleDirectory() {
+  const [people, stores] = await Promise.all([
+    client().from('employees').select('id,name,is_active,store_id').order('name'),
+    client().from('stores').select('id,name').order('name'),
+  ])
+  if (people.error || stores.error) throw new Error('Daftar toko dan karyawan belum bisa dimuat.')
+  return {
+    employees: people.data.map(row => ({ id: row.id, name: row.name, active: row.is_active, storeId: row.store_id })),
+    stores: stores.data as Store[],
+  }
+}
+
+export type ShiftCell = { employee_id: string; work_date: string; code: 'P' | 'M' | 'S' | 'O' }
+
+export async function loadShifts(store: string, month: string, signal: AbortSignal): Promise<ShiftCell[]> {
+  const [year, number] = month.split('-').map(Number)
+  const next = new Date(Date.UTC(year, number, 1)).toISOString().slice(0, 10)
+  const result: ShiftCell[] = []
+  for (let offset = 0; ; offset += 500) {
+    const { data, error } = await client().from('shift_schedule').select('employee_id,work_date,code')
+      .eq('store_id', store).gte('work_date', month + '-01').lt('work_date', next)
+      .order('work_date').order('employee_id').range(offset, offset + 499).abortSignal(signal)
+    if (error) throw new Error('Jadwal belum bisa dimuat.')
+    result.push(...data as ShiftCell[])
+    if (data.length < 500) return result
+  }
+}
+
+export async function importShifts(store: string, month: string, cells: ShiftCell[]) {
+  const { data, error } = await client().rpc('owner_import_shifts', { p_store: store, p_month: month + '-01', p_cells: cells })
+  if (error) throw new Error('Jadwal gagal disimpan. Periksa penempatan karyawan dan bulan yang dipilih.')
+  return data as number
+}
+
+export async function saveBrand(name: string) {
+  const { data, error } = await client().from('app_brand').update({ name }).eq('singleton', true).select('name').single()
+  if (error) throw new Error('Nama aplikasi gagal disimpan.')
+  return data.name as string
+}
+
+export async function loadBrand() {
+  const { data, error } = await client().from('app_brand').select('name').eq('singleton', true).single()
+  if (error) throw new Error('Pengaturan nama aplikasi gagal dimuat.')
+  return data.name as string
+}

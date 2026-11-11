@@ -11,6 +11,10 @@
 
 ---
 
+## Ruang lingkup Teh Idaman
+
+Spesifikasi ini diperbarui untuk permintaan Teh Idaman. Bagian historis yang menjelaskan login PIN dan tidak adanya jadwal tidak berlaku bagi versi ini. Owner membuat tautan aktivasi satu kali yang terikat pada satu karyawan. Jadwal bulanan per toko memakai P, M, S, O dan dapat diimpor dari template Excel. Jadwal bersifat perencanaan, sementara rekap absensi tetap berisi bukti kehadiran aktual. Nama aplikasi dapat diganti dari Pengaturan Owner.
+
 ## 1. Visi dan prinsip produk
 
 Bangun website absensi **sangat sederhana, cepat, aman, mobile-first**. Karyawan membuka tautan, memilih nama, mengisi PIN pribadi, mengambil foto langsung, mengizinkan GPS, dan melakukan **Absen Masuk** atau **Absen Pulang**. Owner masuk melalui autentikasi khusus untuk melihat status absensi setiap karyawan pada tanggal tertentu, foto, koordinat, dan riwayat.

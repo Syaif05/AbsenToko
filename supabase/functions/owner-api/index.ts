@@ -1,6 +1,4 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.99.2'
-import { hashPin, verifyPin } from '../_shared/pin.ts'
-import { importPinKey, openPin, sealPin } from './pin-envelope.ts'
 
 const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
   auth: { persistSession: false, autoRefreshToken: false },
@@ -8,12 +6,8 @@ const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE
 const origins = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(value => value.trim()).filter(Boolean)
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-function newPin() {
-  const sample = new Uint32Array(1)
-  // Rejection sampling keeps all one million PINs equally likely.
-  do { crypto.getRandomValues(sample) } while (sample[0] >= 4_294_000_000)
-  return String(sample[0] % 1_000_000).padStart(6, '0')
-}
+const hex = (bytes: Uint8Array) => Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
+const digest = async (value: string) => hex(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))))
 
 async function readBody(request: Request) {
   const reader = request.body?.getReader()
@@ -68,7 +62,7 @@ Deno.serve(async request => {
       return respond({ url: signed.data.signedUrl })
     }
 
-    if (!['create', 'rename', 'activate', 'deactivate', 'reset_pin', 'view_pin', 'create_store', 'rename_store'].includes(operation)) {
+    if (!['create', 'rename', 'activate', 'deactivate', 'invite', 'create_store', 'rename_store'].includes(operation)) {
       return respond({ error: 'Operasi tidak valid.' }, 400)
     }
     const name = typeof body.name === 'string' ? body.name.trim() : ''
@@ -77,54 +71,20 @@ Deno.serve(async request => {
     }
     if (['create', 'rename'].includes(operation) && body.store_id !== null &&
       (typeof body.store_id !== 'string' || !uuid.test(body.store_id))) return respond({ error: 'Toko tidak valid.' }, 400)
-    if (operation === 'reset_pin' && body.pin !== undefined &&
-      (typeof body.pin !== 'string' || !/^\d{6,12}$/.test(body.pin))) return respond({ error: 'PIN harus terdiri dari 6–12 angka.' }, 400)
-    const rateScope = operation === 'view_pin' ? 'owner-read-pin:' : 'owner-write:'
-    const limited = await admin.rpc('attendance_take_limit', { p_key: rateScope + user.id, p_limit: 20, p_seconds: 60 })
+    const limited = await admin.rpc('attendance_take_limit', { p_key: 'owner-write:' + user.id, p_limit: 20, p_seconds: 60 })
     if (limited.error) return respond({ error: 'Layanan belum tersedia.' }, 503)
     if (!limited.data) return respond({ error: 'Terlalu banyak perubahan. Coba lagi sebentar.' }, 429)
-    const needsPinKey = ['create', 'reset_pin', 'view_pin'].includes(operation)
-    const pinKey = needsPinKey
-      ? await importPinKey(Deno.env.get('OWNER_PIN_ENCRYPTION_KEY') ?? '').catch(() => null)
-      : null
-    if (needsPinKey && !pinKey) return respond({ error: 'Kunci penyimpanan PIN belum dikonfigurasi.' }, 503)
-
-    if (operation === 'view_pin' && pinKey) {
-      const { data, error } = await admin.rpc('owner_read_employee_pin', { p_owner: user.id, p_id: id })
-      if (error) return respond({ error: 'PIN belum bisa dimuat.' }, 503)
-      return respond({ pin: data ? await openPin(pinKey, id, data) : null })
-    }
-
-    let previousHash: string | null = null
-    if (operation === 'reset_pin') {
-      const { data, error } = await admin.from('employees').select('pin_hash').eq('id', id).maybeSingle()
-      if (error) return respond({ error: 'PIN belum bisa direset.' }, 503)
-      if (!data) return respond({ error: 'Karyawan tidak ditemukan.' }, 404)
-      previousHash = data.pin_hash
-    }
-
-    let pin: string | null = null
-    if (operation === 'create' || operation === 'reset_pin') {
-      if (operation === 'reset_pin' && typeof body.pin === 'string') {
-        if (previousHash && await verifyPin(body.pin, previousHash)) return respond({ error: 'Pilih PIN yang berbeda dari PIN saat ini.' }, 400)
-        pin = body.pin
-      } else {
-        do { pin = newPin() } while (previousHash && await verifyPin(pin, previousHash))
-      }
-    }
-    const args = {
-      p_owner: user.id, p_id: id, p_store: body.store_id ?? null, p_operation: operation, p_name: name || null,
-      p_pin_hash: pin ? await hashPin(pin) : null, p_previous_hash: previousHash,
-    }
-    const result = pin && pinKey
-      ? await admin.rpc('owner_set_recoverable_employee_pin', { ...args, p_envelope: await sealPin(pinKey, id, pin) })
-      : await admin.rpc('owner_manage_store_assignment', args)
+    const invitation = operation === 'invite' ? hex(crypto.getRandomValues(new Uint8Array(32))) : null
+    const result = await admin.rpc('owner_manage_staff', {
+      p_owner: user.id, p_id: id, p_store: body.store_id ?? null, p_operation: operation,
+      p_name: name || null, p_invite: invitation ? await digest(invitation) : null,
+    })
     if (result.error) {
       return respond({ error: operation === 'create' && result.error.code === '23505'
-        ? 'Karyawan mungkin sudah tersimpan. Perbarui daftar dan reset PIN bila diperlukan.'
+        ? 'Karyawan mungkin sudah tersimpan. Perbarui daftar sebelum mencoba lagi.'
         : 'Perubahan belum dikonfirmasi. Perbarui daftar sebelum mencoba lagi.' }, 409)
     }
-    return respond({ pin })
+    return respond({ invitation })
   } catch {
     return respond({ error: 'Layanan Owner belum tersedia. Coba lagi.' }, 503)
   }

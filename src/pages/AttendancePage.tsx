@@ -8,34 +8,22 @@ import { TeaHero } from '../components/ui/TeaHero'
 import { useOnline } from '../features/attendance/browser'
 import { displayDate, displayTime, todayWib } from '../features/attendance/dates'
 import { actionLabels } from '../features/attendance/types'
-import type { Action, AttendanceStatus as Status, Employee, Store } from '../features/attendance/types'
-import { demoPin } from '../features/demo/store'
-import { demoMode, endAccount, forgetAccount, listEmployees, listStores, readSavedAccount, refreshStatus,
-  saveAccount, savedAccountKey, SessionEnded, verifyEmployee } from '../features/attendance/api'
+import type { Action, AttendanceStatus as Status, Employee } from '../features/attendance/types'
+import { listActiveEmployees, statusFor } from '../features/demo/store'
+import { activateEmployee, demoMode, endAccount, forgetAccount, readSavedAccount, refreshStatus,
+  saveAccount, savedAccountKey, SessionEnded } from '../features/attendance/api'
 import type { Account } from '../features/attendance/api'
 
 const EvidenceForm = lazy(() => import('../features/attendance/EvidenceForm').then(module => ({ default: module.EvidenceForm })))
 
-type EmployeeList =
-  | { kind: 'loading' }
-  | { kind: 'error'; message: string }
-  | { kind: 'ready'; employees: Employee[] }
 type Confirmation = { action: Action; at: string; employee: Employee }
 
 export default function AttendancePage() {
-  const [list, setList] = useState<EmployeeList>({ kind: 'loading' })
-  const [reload, setReload] = useState(0)
-  const [stores, setStores] = useState<Store[]>([])
-  const [storeId, setStoreId] = useState('')
-  const [storeError, setStoreError] = useState('')
-  const [storeLoading, setStoreLoading] = useState(true)
-  const [storeReload, setStoreReload] = useState(0)
+  const [invitation, setInvitation] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get('aktivasi'))
   const [employeeId, setEmployeeId] = useState('')
-  const [pin, setPin] = useState('')
-  const [visible, setVisible] = useState(false)
   const [verifying, setVerifying] = useState(false)
   const [error, setError] = useState('')
-  const [account, setAccount] = useState(readSavedAccount)
+  const [account, setAccount] = useState(() => invitation ? null : readSavedAccount())
   const [status, setStatus] = useState<Status | null>(null)
   const [remember, setRemember] = useState(true)
   const [accountNotice, setAccountNotice] = useState('')
@@ -53,26 +41,10 @@ export default function AttendancePage() {
   const previousStage = useRef(stage)
 
   useEffect(() => {
-    if (account) return
-    let current = true
-    listStores().then(data => {
-      if (current) { setStores(data); setStoreError(''); setStoreLoading(false) }
-    }, (error: unknown) => {
-      if (current) { setStoreError(errorMessage(error, 'Daftar toko belum tersedia.')); setStoreLoading(false) }
-    })
-    return () => { current = false }
-  }, [account, storeReload])
-
-  useEffect(() => {
-    if (account || !storeId) return
-    let current = true
-    listEmployees(storeId).then((employees) => {
-      if (current) setList({ kind: 'ready', employees })
-    }, (error: unknown) => {
-      if (current) setList({ kind: 'error', message: errorMessage(error, 'Daftar karyawan belum bisa dimuat.') })
-    })
-    return () => { current = false }
-  }, [reload, account, storeId])
+    if (invitation && window.location.hash) {
+      window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search)
+    }
+  }, [invitation])
 
   useEffect(() => {
     if (stage === previousStage.current) return
@@ -87,19 +59,18 @@ export default function AttendancePage() {
     setVerifying(true)
     setError('')
     try {
-      const employee = list.kind === 'ready' && list.employees.find(item => item.id === employeeId)
-      if (!employee) throw new Error('Pilih nama karyawan terlebih dahulu.')
-      const { status, ...next } = await verifyEmployee(employee, pin)
+      const employee = demoMode ? listActiveEmployees().find(item => item.id === employeeId) : undefined
+      const result = employee ? { employee, status: statusFor(employee.id) } : await activateEmployee(invitation ?? '')
+      const { status, ...next } = result
       setAccountNotice(!demoMode && remember && !saveAccount(next)
         ? 'Browser tidak dapat menyimpan sesi. Anda tetap masuk selama halaman ini terbuka.' : '')
+      setInvitation(null)
       setAccountError('')
       setStatus(status)
       setAccount(next)
     } catch (error) {
-      setError(errorMessage(error, 'PIN belum bisa diperiksa. Coba lagi.'))
+      setError(errorMessage(error, 'Perangkat belum bisa diaktifkan. Coba lagi.'))
     } finally {
-      setPin('')
-      setVisible(false)
       setVerifying(false)
     }
   }
@@ -182,7 +153,7 @@ export default function AttendancePage() {
 
   useEffect(() => {
     if (!account?.expiresAt || action || confirmation || busy) return
-    const timer = window.setTimeout(() => clearAccount(account, 'Sesi habis. Masukkan PIN kembali.'),
+    const timer = window.setTimeout(() => clearAccount(account, 'Sesi habis. Minta tautan aktivasi baru kepada Owner.'),
       Math.max(0, account.expiresAt - Date.now()))
     return () => window.clearTimeout(timer)
   }, [account, action, confirmation, busy])
@@ -233,7 +204,7 @@ export default function AttendancePage() {
                 <span className="avatar" aria-hidden="true">{Array.from(account.employee.name)[0]?.toLocaleUpperCase('id')}</span>
                 <div><p className="panel-kicker">Akun karyawan</p><h2 ref={formHeading} tabIndex={-1}>{account.employee.name}</h2></div>
               </div>
-              <p className="muted">{expiry ? 'Sesi berlaku sampai ' + (todayWib(expiry) === todayWib() ? '' : 'besok, ') + displayTime(expiry.toISOString()) + ' WIB' : ''}</p>
+              <p className="muted">{expiry ? 'Sesi berlaku sampai ' + (todayWib(expiry) === todayWib() ? '' : displayDate(todayWib(expiry)) + ', ') + displayTime(expiry.toISOString()) + ' WIB' : ''}</p>
               {accountNotice && <Notice>{accountNotice}</Notice>}
               {accountError && <Notice tone="error">{accountError}</Notice>}
               {status ? <AttendanceStatus status={status} /> : online && !accountError && <Loading label="Memuat status absensi…" />}
@@ -251,68 +222,25 @@ export default function AttendancePage() {
               <div className="panel-intro">
                 <p className="panel-kicker">Portal karyawan</p>
                 <h2 id="employee-login-title">Hai, tim!</h2>
-                <p className="muted">Pilih toko, nama, lalu masukkan PIN.</p>
+                <p className="muted">{demoMode ? 'Pilih nama untuk mencoba absensi.'
+                  : invitation ? 'Aktifkan perangkat ini untuk mulai absen.' : 'Buka tautan aktivasi dari Owner di perangkat yang dipakai untuk absen.'}</p>
               </div>
-              {storeLoading && <Loading label="Memuat daftar toko…" />}
-              {storeError && <>
-                <Notice tone="error">{storeError}</Notice>
-                <button className="button button-secondary" type="button" onClick={() => {
-                  setStoreError(''); setStoreLoading(true); setStoreReload(value => value + 1)
-                }}>Muat Ulang Toko</button>
-              </>}
-              {!storeLoading && !storeError && (stores.length ? (
-                <label className="field"><span>Toko</span>
-                  <select value={storeId} disabled={verifying} onChange={event => {
-                    setStoreId(event.target.value); setList({ kind: 'loading' }); setEmployeeId(''); setPin(''); setError('')
-                  }}>
-                    <option value="">Pilih toko Anda</option>
-                    {stores.map(store => <option key={store.id} value={store.id}>{store.name}</option>)}
-                  </select>
-                </label>
-              ) : <Notice>Belum ada toko. Hubungi Owner.</Notice>)}
-              {storeId && list.kind === 'loading' && <Loading label="Memuat daftar karyawan…" />}
-              {storeId && list.kind === 'error' && (
-                <>
-                  <Notice tone="error">{list.message}</Notice>
-                  <button className="button button-secondary w-full" type="button" disabled={!online} onClick={() => {
-                    setList({ kind: 'loading' })
-                    setReload((value) => value + 1)
-                  }}>Coba Lagi</button>
-                </>
-              )}
-              {storeId && list.kind === 'ready' && (list.employees.length ? (
-                <form className="stack" onSubmit={verify}>
-                  <EmployeeSelector employees={list.employees} value={employeeId} onChange={(value) => {
-                    setEmployeeId(value)
-                    setPin('')
-                    setError('')
-                  }} disabled={verifying} />
-                  <div className="pin-field">
-                    <label className="field" htmlFor="employee-pin">PIN karyawan</label>
-                    <div className="input-with-action">
-                      <input id="employee-pin" type={visible ? 'text' : 'password'} inputMode="numeric" autoComplete="off"
-                        placeholder="Masukkan PIN" required pattern="[0-9]{6,12}" maxLength={12} value={pin} disabled={verifying}
-                        onChange={(event) => { setPin(event.target.value.replace(/[^0-9]/g, '')); setError('') }} />
-                      <button type="button" className="button button-quiet" aria-controls="employee-pin" disabled={verifying} onClick={() => setVisible((value) => !value)}>
-                        {visible ? 'Sembunyikan' : 'Tampilkan'}
-                      </button>
-                    </div>
-                  </div>
-                  {!demoMode && <label className="remember-account">
-                    <input type="checkbox" checked={remember} disabled={verifying} onChange={event => setRemember(event.target.checked)} />
-                    <span>Tetap masuk di perangkat ini <small>Hilangkan centang jika perangkat dipakai bersama.</small></span>
-                  </label>}
-                  {error && <Notice tone="error">{error}</Notice>}
-                  <button className="button button-primary w-full" type="submit" disabled={verifying || !online}>
-                    {verifying ? 'Memeriksa PIN…' : 'Lanjutkan'}
-                  </button>
-                </form>
-              ) : <Notice>Belum ada karyawan aktif. Hubungi Owner.</Notice>)}
+              {error && <Notice tone="error">{error}</Notice>}
+              {(demoMode || invitation) && <form className="stack" onSubmit={verify}>
+                {demoMode && <EmployeeSelector employees={listActiveEmployees()} value={employeeId} onChange={setEmployeeId} disabled={verifying} />}
+                {!demoMode && <label className="remember-account">
+                  <input type="checkbox" checked={remember} onChange={event => setRemember(event.target.checked)} disabled={verifying} />
+                  <span>Ingat perangkat ini</span>
+                </label>}
+                <button className="button button-primary w-full" disabled={!online || verifying || (demoMode && !employeeId)}>
+                  {verifying ? 'Mengaktifkan…' : demoMode ? 'Lanjutkan' : 'Aktifkan Perangkat'}
+                </button>
+              </form>}
             </section>
           )}
           {demoMode && <footer className="demo-footer">
             <span className="demo-indicator" aria-hidden="true" />
-            {stage === 'selection' ? 'Mode demo · PIN contoh ' + demoPin : 'Mode demo · Data sementara'}
+            Mode demo · Data sementara
           </footer>}
         </div>
       </main>

@@ -2,9 +2,7 @@ import { todayWib } from '../attendance/dates'
 import { validLocation } from '../attendance/types'
 import type { Action, Attendance, AttendanceStatus, Employee, Evidence, Location } from '../attendance/types'
 
-export const demoPin = '246810'
 const sessionWindowMs = 24 * 60 * 60 * 1000
-const cooldownMs = 30_000
 const employees: Employee[] = [
   { id: 'alya', name: 'Alya Pratama', active: true },
   { id: 'bima', name: 'Bima Saputra', active: true },
@@ -12,7 +10,6 @@ const employees: Employee[] = [
   { id: 'dimas', name: 'Dimas Ramadhan', active: true },
   { id: 'nisa', name: 'Nisa Wulandari', active: true },
 ]
-const attempts = new Map<string, { count: number; until: number }>()
 const submissions = new Map<string, Evidence>()
 const seededToday = todayWib()
 const seededYesterday = todayWib(new Date(Date.now() - sessionWindowMs))
@@ -50,8 +47,7 @@ function listEmployees() {
   return employees.map((employee) => ({ ...employee }))
 }
 
-export async function listActiveEmployees() {
-  await waitForDemo()
+export function listActiveEmployees() {
   return listEmployees().filter((employee) => employee.active)
 }
 
@@ -63,26 +59,6 @@ export function statusFor(employeeId: string, now = new Date()): Extract<Attenda
   }
   const complete = records.find((record) => record.employeeId === employeeId && record.workDate === todayWib(now))
   return complete ? { kind: 'COMPLETED', record: complete } : { kind: 'NOT_CHECKED_IN' }
-}
-
-export async function verifyPin(employeeId: string, pin: string) {
-  await waitForDemo()
-  const now = Date.now()
-  const previous = attempts.get(employeeId)
-  const current = previous && now < previous.until ? previous : { count: 0, until: now + cooldownMs }
-  if (current.count >= 5) {
-    const remaining = Math.ceil((current.until - now) / 1000)
-    throw new Error('Terlalu banyak percobaan. Coba lagi dalam ' + remaining + ' detik.')
-  }
-  const employee = employees.find((person) => person.id === employeeId && person.active)
-  const matches = pin === demoPin
-  if (!employee || !matches) {
-    const count = current.count + 1
-    attempts.set(employeeId, { count, until: count === 5 ? now + cooldownMs : current.until })
-    throw new Error('Nama atau PIN tidak sesuai. Coba lagi.')
-  }
-  attempts.delete(employeeId)
-  return { employee: { ...employee }, status: statusFor(employeeId) }
 }
 
 export async function submitAttendance(input: {

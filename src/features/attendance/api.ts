@@ -1,12 +1,12 @@
 import * as demo from '../demo/store'
-import type { Action, AttendanceStatus, Employee, Location, Store } from './types'
+import type { Action, AttendanceStatus, Employee, Location } from './types'
 
 export const demoMode = import.meta.env.VITE_ATTENDANCE_MODE === 'demo'
 export type Account = { employee: Employee; token?: string; expiresAt?: number }
 export type Session = Account & { status: AttendanceStatus }
 export class SessionEnded extends Error {}
 const tokenPattern = /^[0-9a-f]{64}$/
-export const savedAccountKey = 'absentoko:employee-account:' + import.meta.env.VITE_SUPABASE_URL?.trim()
+export const savedAccountKey = 'absentoko:employee-device:' + import.meta.env.VITE_SUPABASE_URL?.trim()
 
 export function readSavedAccount(): Account | null {
   if (demoMode) return null
@@ -53,7 +53,7 @@ async function call<T>(operation: string, fields = {}, token?: string): Promise<
   }).catch(() => { throw new Error('Koneksi ke layanan absensi terputus. Coba lagi.') })
   const result = await response.json().catch(() => null)
   if (!response.ok || !result) {
-    if (token && response.status === 401) throw new SessionEnded('Sesi berakhir. Masukkan PIN kembali.')
+    if (token && response.status === 401) throw new SessionEnded('Sesi berakhir. Minta tautan aktivasi baru kepada Owner.')
     throw new Error(typeof result?.error === 'string' ? result.error : 'Layanan absensi belum tersedia.')
   }
   return result as T
@@ -72,23 +72,13 @@ function readStatus({ status, attendance }: StatusResponse): AttendanceStatus {
   }
 }
 
-export async function listStores(): Promise<Store[]> {
-  if (demoMode) return [{ id: 'demo', name: 'Toko Demo' }]
-  return (await call<{ stores: Store[] }>('stores')).stores
-}
-
-export async function listEmployees(storeId: string): Promise<Employee[]> {
-  if (demoMode) return demo.listActiveEmployees()
-  const { employees } = await call<{ employees: Pick<Employee, 'id' | 'name'>[] }>('list', { store_id: storeId })
-  return employees.map(employee => ({ ...employee, active: true, storeId }))
-}
-
-export async function verifyEmployee(employee: Employee, pin: string): Promise<Session> {
-  if (demoMode) return demo.verifyPin(employee.id, pin)
-  const result = await call<StatusResponse & { token: string; expires_at: string }>('verify', { employee_id: employee.id, store_id: employee.storeId, pin })
+export async function activateEmployee(invitation: string): Promise<Session> {
+  const result = await call<StatusResponse & { employee: Employee; token: string; expires_at: string }>('activate', { invitation })
   const expiresAt = Date.parse(result.expires_at)
-  if (!tokenPattern.test(result.token) || !Number.isFinite(expiresAt)) throw new Error('Sesi absensi tidak valid.')
-  return { employee, status: readStatus(result), token: result.token, expiresAt }
+  if (!tokenPattern.test(result.token) || !Number.isFinite(expiresAt) || !result.employee?.id) {
+    throw new Error('Sesi absensi tidak valid.')
+  }
+  return { employee: result.employee, status: readStatus(result), token: result.token, expiresAt }
 }
 
 export async function refreshStatus(session: Account) {

@@ -1,3 +1,5 @@
+> **Teh Idaman:** Lihat bagian [Aktivasi perangkat dan jadwal](#aktivasi-perangkat-dan-jadwal) untuk rilis terbaru. Instruksi PIN di bagian terdahulu hanya berlaku untuk rilis lama.
+
 # Fase 2 · Setup Supabase lewat Dashboard
 
 Gunakan proyek Supabase yang disiapkan untuk Absen Toko. Jalankan setiap file SQL **secara utuh** di tab SQL Editor baru dengan role `postgres`. Urutan ini bisa dipakai untuk setup awal atau membuat ulang schema pada proyek Supabase baru.
@@ -105,3 +107,20 @@ Uji migrasi di staging dengan [uji toko](tests/store_groups.sql). Uji membuat da
    npx supabase@3.1.0 functions deploy owner-api --remote=PROJECT_REF --use-api
    ```
 4. Di **Kelola Karyawan → Edit**, gunakan **Lihat PIN** dan **Salin Nama dan PIN**. Untuk akun dengan PIN yang dibuat sebelum pembaruan, gunakan **Ubah PIN** satu kali. PIN baru disimpan bersama salinan terenkripsi, dan pembukaannya dicatat di audit Owner.
+
+
+## Aktivasi perangkat dan jadwal
+
+1. Di SQL Editor, jalankan [migrasi Teh Idaman](migrations/20261111115133_idaman_schedule_and_activation.sql) setelah migrasi akun dan toko. Migrasi ini juga mendukung proyek yang melewati migrasi PIN aktif. Setelah commit, sesi lama berakhir dan data PIN lama dihapus. Catatan absensi, toko, dan profil karyawan tetap ada.
+2. Dalam jendela pemeliharaan yang sama, deploy kedua Edge Function dari versi baru. Kode lama masih mengharapkan kolom PIN, jadi jangan pisahkan tahap migrasi dan deployment terlalu lama.
+
+   ```sh
+   npx supabase@3.1.0 functions deploy attendance-api --remote=PROJECT_REF --use-api
+   npx supabase@3.1.0 functions deploy owner-api --remote=PROJECT_REF --use-api
+   ```
+
+3. Deploy frontend versi baru. Buka **Kelola Karyawan → Profil → Buat Tautan Aktivasi**. Kirim secara pribadi. Tautan berlaku 24 jam dan hanya bisa digunakan sekali. Sesi perangkat berlaku 14 hari. Membuat tautan baru, menonaktifkan karyawan, atau memindahkannya ke toko lain mencabut akses lama.
+4. Buka **Jadwal Karyawan**, pilih toko dan bulan, lalu **Unduh Template Excel**. Isi P, M, S, atau O di Excel atau Google Sheets. Jika memakai Sheets, unduh kembali sebagai .xlsx. Unggah, periksa pratinjau, lalu **Simpan Jadwal**. Kode O berarti libur. Sel kosong mempertahankan data yang tersimpan.
+5. Buka **Pengaturan** untuk mengganti nama aplikasi. Default adalah **Teh Idaman**.
+
+Uji konfigurasi menggunakan [SQL aktivasi dan jadwal](tests/idaman_schedule_and_activation.sql) pada staging. SQL uji melakukan rollback.
