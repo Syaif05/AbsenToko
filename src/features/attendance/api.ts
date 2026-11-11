@@ -1,5 +1,5 @@
 import * as demo from '../demo/store'
-import type { Action, AttendanceStatus, Employee, Location } from './types'
+import type { Action, AttendanceStatus, Employee, Location, Store } from './types'
 
 export const demoMode = import.meta.env.VITE_ATTENDANCE_MODE === 'demo'
 export type Account = { employee: Employee; token?: string; expiresAt?: number }
@@ -53,7 +53,7 @@ async function call<T>(operation: string, fields = {}, token?: string): Promise<
   }).catch(() => { throw new Error('Koneksi ke layanan absensi terputus. Coba lagi.') })
   const result = await response.json().catch(() => null)
   if (!response.ok || !result) {
-    if (token && response.status === 401) throw new SessionEnded('Sesi berakhir. Minta tautan aktivasi baru kepada Owner.')
+    if (token && response.status === 401) throw new SessionEnded('Sesi berakhir. Pilih toko dan nama kembali.')
     throw new Error(typeof result?.error === 'string' ? result.error : 'Layanan absensi belum tersedia.')
   }
   return result as T
@@ -72,8 +72,26 @@ function readStatus({ status, attendance }: StatusResponse): AttendanceStatus {
   }
 }
 
-export async function activateEmployee(invitation: string): Promise<Session> {
-  const result = await call<StatusResponse & { employee: Employee; token: string; expires_at: string }>('activate', { invitation })
+export async function attendanceStores(): Promise<Store[]> {
+  if (demoMode) return [{ id: 'demo', name: 'Toko Demo' }]
+  return (await call<{ stores: Store[] }>('stores')).stores
+}
+
+export async function attendanceEmployees(storeId: string): Promise<Employee[]> {
+  if (demoMode) return demo.listActiveEmployees()
+  const { employees } = await call<{ employees: Employee[] }>('list', { store_id: storeId })
+  return employees
+}
+
+export async function selectEmployee(storeId: string, employeeId: string): Promise<Session> {
+  if (demoMode) {
+    const employee = demo.listActiveEmployees().find(person => person.id === employeeId)
+    if (!employee) throw new Error('Karyawan tidak ditemukan.')
+    return { employee, status: demo.statusFor(employeeId) }
+  }
+  const result = await call<StatusResponse & { employee: Employee; token: string; expires_at: string }>(
+    'select_employee', { store_id: storeId, employee_id: employeeId },
+  )
   const expiresAt = Date.parse(result.expires_at)
   if (!tokenPattern.test(result.token) || !Number.isFinite(expiresAt) || !result.employee?.id) {
     throw new Error('Sesi absensi tidak valid.')

@@ -404,3 +404,8 @@ input::placeholder { color: #52655b; opacity: 1; }
 .schedule-table td[data-shift="M"] { background: #fff0c2; }
 .schedule-table td[data-shift="S"] { background: #dfeff5; }
 .schedule-table td[data-shift="O"] { background: #f8e4e2; }
+.directory-heading, .directory-list li { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .75rem; }
+.directory-list { margin: 0; padding: 0; list-style: none; }
+.directory-list li { padding: .9rem .15rem; border-top: 1px solid var(--border); }
+.directory-list li > div:first-child { min-width: 0; overflow-wrap: anywhere; }
+.directory-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }

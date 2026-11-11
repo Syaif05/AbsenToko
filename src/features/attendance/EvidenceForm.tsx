@@ -54,7 +54,7 @@ export function EvidenceForm({ session, action, headingRef, onBack, onSuccess }:
     setError('')
     if (session.expiresAt && Date.now() >= session.expiresAt) {
       setExpired(true)
-      setError('Sesi habis. Minta tautan aktivasi baru kepada Owner.')
+      setError('Sesi habis. Pilih toko dan nama kembali.')
       return
     }
     if (!attempt.current && Date.now() - gps.capturedAt > freshForMs) {

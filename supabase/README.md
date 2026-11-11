@@ -1,4 +1,4 @@
-> **Teh Idaman:** Lihat bagian [Aktivasi perangkat dan jadwal](#aktivasi-perangkat-dan-jadwal) untuk rilis terbaru. Instruksi PIN di bagian terdahulu hanya berlaku untuk rilis lama.
+> **Teh Idaman:** Lihat bagian [Absensi langsung dan pengelolaan data](#absensi-langsung-dan-pengelolaan-data) untuk rilis terbaru. Instruksi PIN di bagian terdahulu hanya berlaku untuk rilis lama.
 
 # Fase 2 · Setup Supabase lewat Dashboard
 
@@ -124,3 +124,13 @@ Uji migrasi di staging dengan [uji toko](tests/store_groups.sql). Uji membuat da
 5. Buka **Pengaturan** untuk mengganti nama aplikasi. Default adalah **Teh Idaman**.
 
 Uji konfigurasi menggunakan [SQL aktivasi dan jadwal](tests/idaman_schedule_and_activation.sql) pada staging. SQL uji melakukan rollback.
+
+
+## Absensi langsung dan pengelolaan data
+
+1. Setelah migrasi jadwal dan aktivasi sudah terpasang, jalankan [migrasi absensi langsung](migrations/20261111123220_direct_attendance_and_archives.sql) di SQL Editor.
+2. Deploy ulang Edge Function `attendance-api` dan `owner-api` dari versi kode baru, kemudian deploy frontend versi yang sama.
+3. Uji dari browser tanpa sesi tersimpan. Pilih toko, pilih nama, dan klik **Lanjutkan Absen**. Pilihan hanya mencakup toko dan karyawan aktif.
+4. Di dashboard Owner, buka **Kelola Toko** atau **Kelola Karyawan**. Hapus mengarsipkan data dan mempertahankan jadwal serta riwayat absensi. Pindahkan atau hapus karyawan yang masih terdaftar sebelum menghapus tokonya.
+
+Pemilihan nama tidak memverifikasi identitas. Foto dan lokasi tetap menjadi bukti absensi.

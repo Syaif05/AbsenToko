@@ -11,7 +11,6 @@ import { loadDashboard } from '../features/owner/api'
 import { Dialog } from '../components/ui/Dialog'
 
 const AttendanceDetail = lazy(() => import('../features/owner/AttendanceDetail').then(module => ({ default: module.AttendanceDetail })))
-const EmployeeManager = lazy(() => import('../features/owner/EmployeeManager').then(module => ({ default: module.EmployeeManager })))
 
 const statIcons = {
   total: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m20 0v-2a4 4 0 0 0-3-4M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0Zm5-4a4 4 0 0 1 0 8',
@@ -54,7 +53,6 @@ export default function OwnerDashboardPage({ onLogout }: { onLogout: () => Promi
   const [loaded, setLoaded] = useState<{ date: string; revision: number }>()
   const [leaving, setLeaving] = useState(false)
   const [detail, setDetail] = useState<Employee | null>(null)
-  const [managing, setManaging] = useState(false)
   const [error, setError] = useState('')
   const online = useOnline()
   const refreshing = loaded?.date !== date || loaded.revision !== revision
@@ -120,7 +118,8 @@ export default function OwnerDashboardPage({ onLogout }: { onLogout: () => Promi
           <nav className="manage-actions" aria-label="Menu Owner">
           <Link className="button hero-action" to="/owner/jadwal">Jadwal Karyawan</Link>
           <Link className="button hero-action" to="/owner/pengaturan">Pengaturan</Link>
-          <button className="button hero-action" type="button" disabled={!snapshot || !online} onClick={() => setManaging(true)}>Kelola Karyawan</button>
+          <Link className="button hero-action" to="/owner/karyawan">Kelola Karyawan</Link>
+          <Link className="button hero-action" to="/owner/toko">Kelola Toko</Link>
           </nav>
         </TeaHero>
         <section className="stats" aria-label="Ringkasan absensi karyawan aktif">
@@ -142,7 +141,7 @@ export default function OwnerDashboardPage({ onLogout }: { onLogout: () => Promi
               <label className="field"><span>Toko</span>
                 <select value={storeFilter} onChange={event => setStoreFilter(event.target.value)}>
                   <option value="">Semua toko</option>
-                  {stores.map(store => <option key={store.id} value={store.id}>{store.name}</option>)}
+                  {stores.map(store => <option key={store.id} value={store.id}>{store.name}{store.archivedAt ? ' (arsip)' : ''}</option>)}
                 </select>
               </label>
               <label className="field"><span>Tanggal absensi</span>
@@ -194,11 +193,6 @@ export default function OwnerDashboardPage({ onLogout }: { onLogout: () => Promi
         <Loading label="Memuat detail absensi…" />
       </Dialog>}>
         <AttendanceDetail employee={detail} date={date} record={byEmployee.get(detail.id)} onClose={() => setDetail(null)} />
-      </Suspense>}
-      {managing && <Suspense fallback={<Dialog title="Kelola Karyawan" onClose={() => setManaging(false)}>
-        <Loading label="Memuat pengelolaan karyawan…" />
-      </Dialog>}>
-        <EmployeeManager employees={employees} stores={stores} onChange={refresh} onClose={() => setManaging(false)} />
       </Suspense>}
     </>
   )

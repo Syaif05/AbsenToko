@@ -24,7 +24,7 @@ class Failure extends Error {
 async function rpc(name: string, args: Record<string, unknown>) {
   const { data, error } = await client.rpc(name, args)
   if (error?.code === 'P0001' && error.message === 'invalid session') {
-    throw new Failure(401, 'Sesi berakhir. Minta tautan aktivasi baru kepada Owner.')
+    throw new Failure(401, 'Sesi berakhir. Pilih toko dan nama kembali.')
   }
   if (error) throw new Failure(409, 'Permintaan tidak dapat diproses. Periksa status absensi kembali.')
   return data
@@ -79,6 +79,30 @@ Deno.serve(async request => {
       : null
     if (sourceHash) await limit('source:' + sourceHash, 60, 60)
     const body = await boundedJson(request)
+    if (body.operation === 'stores') {
+      const { data, error } = await client.from('stores').select('id,name').is('archived_at', null).order('name')
+      if (error) throw new Failure(503, 'Daftar toko belum bisa dimuat.')
+      return respond({ stores: data })
+    }
+    if (body.operation === 'list') {
+      if (!uuid(body.store_id)) throw new Failure(400, 'Pilih toko yang valid.')
+      const { data, error } = await client.from('employees').select('id,name,stores!inner(id)')
+        .eq('store_id', body.store_id).eq('is_active', true).is('archived_at', null).is('stores.archived_at', null)
+        .order('name')
+      if (error) throw new Failure(503, 'Daftar karyawan belum bisa dimuat.')
+      return respond({ employees: data.map(({ id, name }) => ({ id, name })) })
+    }
+    if (body.operation === 'select_employee') {
+      if (!uuid(body.store_id) || !uuid(body.employee_id)) throw new Failure(400, 'Pilih toko dan nama yang valid.')
+      await limit('select:' + body.employee_id, 10, 60)
+      const token = hex(crypto.getRandomValues(new Uint8Array(32)).buffer)
+      const { data, error } = await client.rpc('attendance_select_employee', {
+        p_store: body.store_id, p_employee: body.employee_id, p_session: await digest(encoder.encode(token)),
+      })
+      if (error?.message === 'employee unavailable') throw new Failure(409, 'Karyawan sudah tidak tersedia di toko ini. Pilih kembali.')
+      if (error || !data) throw new Failure(503, 'Sesi absensi belum bisa dibuka. Coba lagi.')
+      return respond({ token, ...data })
+    }
     if (body.operation === 'activate') {
       if (typeof body.invitation !== 'string' || !/^[0-9a-f]{64}$/.test(body.invitation)) {
         throw new Failure(400, 'Tautan aktivasi tidak valid.')
@@ -95,7 +119,7 @@ Deno.serve(async request => {
       return respond({ token, ...data })
     }
     const token = request.headers.get('authorization')?.replace(/^Bearer /, '')
-    if (!token || !/^[0-9a-f]{64}$/.test(token)) throw new Failure(401, 'Aktivasi perangkat diperlukan.')
+    if (!token || !/^[0-9a-f]{64}$/.test(token)) throw new Failure(401, 'Pilih toko dan nama terlebih dahulu.')
     const hash = await digest(encoder.encode(token))
     await limit('session:' + hash, 30, 60)
     if (body.operation === 'status') return respond(await rpc('attendance_status', { p_hash: hash }))

@@ -8,9 +8,8 @@ import { TeaHero } from '../components/ui/TeaHero'
 import { useOnline } from '../features/attendance/browser'
 import { displayDate, displayTime, todayWib } from '../features/attendance/dates'
 import { actionLabels } from '../features/attendance/types'
-import type { Action, AttendanceStatus as Status, Employee } from '../features/attendance/types'
-import { listActiveEmployees, statusFor } from '../features/demo/store'
-import { activateEmployee, demoMode, endAccount, forgetAccount, readSavedAccount, refreshStatus,
+import type { Action, AttendanceStatus as Status, Employee, Store } from '../features/attendance/types'
+import { attendanceEmployees, attendanceStores, selectEmployee, demoMode, endAccount, forgetAccount, readSavedAccount, refreshStatus,
   saveAccount, savedAccountKey, SessionEnded } from '../features/attendance/api'
 import type { Account } from '../features/attendance/api'
 
@@ -19,13 +18,17 @@ const EvidenceForm = lazy(() => import('../features/attendance/EvidenceForm').th
 type Confirmation = { action: Action; at: string; employee: Employee }
 
 export default function AttendancePage() {
-  const [invitation, setInvitation] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get('aktivasi'))
+  const [stores, setStores] = useState<Store[]>()
+  const [storeId, setStoreId] = useState('')
+  const [staff, setStaff] = useState<Employee[]>()
+  const [directoryError, setDirectoryError] = useState('')
+  const [directoryRetry, setDirectoryRetry] = useState(0)
   const [employeeId, setEmployeeId] = useState('')
   const [verifying, setVerifying] = useState(false)
   const [error, setError] = useState('')
-  const [account, setAccount] = useState(() => invitation ? null : readSavedAccount())
+  const [account, setAccount] = useState(readSavedAccount)
   const [status, setStatus] = useState<Status | null>(null)
-  const [remember, setRemember] = useState(true)
+  const [remember, setRemember] = useState(false)
   const [accountNotice, setAccountNotice] = useState('')
   const [accountError, setAccountError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -41,10 +44,26 @@ export default function AttendancePage() {
   const previousStage = useRef(stage)
 
   useEffect(() => {
-    if (invitation && window.location.hash) {
-      window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search)
-    }
-  }, [invitation])
+    if (account || !online) return
+    let current = true
+    void attendanceStores().then(data => {
+      if (current) setStores(data)
+    }, error => {
+      if (current) setDirectoryError(errorMessage(error, 'Daftar toko belum bisa dimuat.'))
+    })
+    return () => { current = false }
+  }, [account, online, directoryRetry])
+
+  useEffect(() => {
+    if (account || !storeId || !online) return
+    let current = true
+    void attendanceEmployees(storeId).then(data => {
+      if (current) setStaff(data)
+    }, error => {
+      if (current) setDirectoryError(errorMessage(error, 'Daftar karyawan belum bisa dimuat.'))
+    })
+    return () => { current = false }
+  }, [account, storeId, online, directoryRetry])
 
   useEffect(() => {
     if (stage === previousStage.current) return
@@ -55,21 +74,18 @@ export default function AttendancePage() {
 
   async function verify(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!online || verifying) return
+    if (!online || verifying || !storeId || !employeeId || !staff?.some(person => person.id === employeeId)) return
     setVerifying(true)
     setError('')
     try {
-      const employee = demoMode ? listActiveEmployees().find(item => item.id === employeeId) : undefined
-      const result = employee ? { employee, status: statusFor(employee.id) } : await activateEmployee(invitation ?? '')
-      const { status, ...next } = result
+      const { status, ...next } = await selectEmployee(storeId, employeeId)
       setAccountNotice(!demoMode && remember && !saveAccount(next)
         ? 'Browser tidak dapat menyimpan sesi. Anda tetap masuk selama halaman ini terbuka.' : '')
-      setInvitation(null)
       setAccountError('')
       setStatus(status)
       setAccount(next)
     } catch (error) {
-      setError(errorMessage(error, 'Perangkat belum bisa diaktifkan. Coba lagi.'))
+      setError(errorMessage(error, 'Sesi absensi belum bisa dibuka. Coba lagi.'))
     } finally {
       setVerifying(false)
     }
@@ -153,7 +169,7 @@ export default function AttendancePage() {
 
   useEffect(() => {
     if (!account?.expiresAt || action || confirmation || busy) return
-    const timer = window.setTimeout(() => clearAccount(account, 'Sesi habis. Minta tautan aktivasi baru kepada Owner.'),
+    const timer = window.setTimeout(() => clearAccount(account, 'Sesi habis. Pilih toko dan nama kembali.'),
       Math.max(0, account.expiresAt - Date.now()))
     return () => window.clearTimeout(timer)
   }, [account, action, confirmation, busy])
@@ -222,20 +238,41 @@ export default function AttendancePage() {
               <div className="panel-intro">
                 <p className="panel-kicker">Portal karyawan</p>
                 <h2 id="employee-login-title">Hai, tim!</h2>
-                <p className="muted">{demoMode ? 'Pilih nama untuk mencoba absensi.'
-                  : invitation ? 'Aktifkan perangkat ini untuk mulai absen.' : 'Buka tautan aktivasi dari Owner di perangkat yang dipakai untuk absen.'}</p>
+                <p className="muted">Pilih toko dan nama Anda untuk mulai absen.</p>
               </div>
               {error && <Notice tone="error">{error}</Notice>}
-              {(demoMode || invitation) && <form className="stack" onSubmit={verify}>
-                {demoMode && <EmployeeSelector employees={listActiveEmployees()} value={employeeId} onChange={setEmployeeId} disabled={verifying} />}
-                {!demoMode && <label className="remember-account">
-                  <input type="checkbox" checked={remember} onChange={event => setRemember(event.target.checked)} disabled={verifying} />
-                  <span>Ingat perangkat ini</span>
-                </label>}
-                <button className="button button-primary w-full" disabled={!online || verifying || (demoMode && !employeeId)}>
-                  {verifying ? 'Mengaktifkan…' : demoMode ? 'Lanjutkan' : 'Aktifkan Perangkat'}
-                </button>
-              </form>}
+              {directoryError ? <>
+                <Notice tone="error">{directoryError}</Notice>
+                <button type="button" className="button button-secondary" disabled={!online} onClick={() => {
+                  setDirectoryError('')
+                  setDirectoryRetry(value => value + 1)
+                }}>Coba Lagi</button>
+              </> : !stores ? <Loading label="Memuat toko…" /> : stores.length === 0
+                ? <Notice>Belum ada toko yang tersedia. Hubungi Owner.</Notice>
+                : <form className="stack" onSubmit={verify}>
+                  <label className="field">Pilih toko
+                    <select required value={storeId} disabled={verifying || !online} onChange={event => {
+                      setStoreId(event.target.value)
+                      setEmployeeId('')
+                      setStaff(undefined)
+                      setError('')
+                    }}>
+                      <option value="">Pilih toko Anda</option>
+                      {stores.map(store => <option key={store.id} value={store.id}>{store.name}</option>)}
+                    </select>
+                  </label>
+                  {storeId && (staff ? staff.length
+                    ? <EmployeeSelector employees={staff} value={employeeId} onChange={setEmployeeId} disabled={verifying || !online} />
+                    : <Notice>Belum ada karyawan aktif di toko ini.</Notice>
+                    : <Loading label="Memuat karyawan…" />)}
+                  {!demoMode && <label className="remember-account">
+                    <input type="checkbox" checked={remember} onChange={event => setRemember(event.target.checked)} disabled={verifying} />
+                    <span>Ingat saya di perangkat ini</span>
+                  </label>}
+                  <button className="button button-primary w-full" disabled={!online || verifying || !staff?.some(person => person.id === employeeId)}>
+                    {verifying ? 'Membuka absensi…' : 'Lanjutkan Absen'}
+                  </button>
+                </form>}
             </section>
           )}
           {demoMode && <footer className="demo-footer">

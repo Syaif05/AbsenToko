@@ -5,6 +5,7 @@ import OwnerDashboardPage from '../../pages/OwnerDashboardPage'
 import OwnerLoginPage from '../../pages/OwnerLoginPage'
 import { isOwner, ownerClient } from './api'
 
+const OwnerDirectoryPage = lazy(() => import('../../pages/OwnerDirectoryPage'))
 const OwnerSchedulePage = lazy(() => import('../../pages/OwnerSchedulePage'))
 const OwnerSettingsPage = lazy(() => import('../../pages/OwnerSettingsPage'))
 
@@ -56,6 +57,8 @@ export default function OwnerRoutes() {
   return (
     <Routes>
       <Route index element={allowed ? <OwnerDashboardPage key={uid} onLogout={logout} /> : <Navigate replace to="/owner/login" />} />
+      <Route path="karyawan" element={allowed ? <OwnerDirectoryPage key="employees" mode="employees" /> : <Navigate replace to="/owner/login" />} />
+      <Route path="toko" element={allowed ? <OwnerDirectoryPage key="stores" mode="stores" /> : <Navigate replace to="/owner/login" />} />
       <Route path="jadwal" element={allowed ? <OwnerSchedulePage /> : <Navigate replace to="/owner/login" />} />
       <Route path="pengaturan" element={allowed ? <OwnerSettingsPage /> : <Navigate replace to="/owner/login" />} />
       <Route path="login" element={allowed ? <Navigate replace to="/owner" /> : <OwnerLoginPage />} />

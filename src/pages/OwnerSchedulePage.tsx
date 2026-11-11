@@ -76,7 +76,7 @@ export default function OwnerSchedulePage() {
           <label className="field">Toko
             <select value={storeId} disabled={busy || !directory} onChange={event => { resetPreview(); setStoreId(event.target.value) }}>
               {!directory?.stores.length && <option value="">Belum ada toko</option>}
-              {directory?.stores.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+              {directory?.stores.map(item => <option key={item.id} value={item.id}>{item.name}{item.archivedAt ? ' (arsip)' : ''}</option>)}
             </select>
           </label>
           <label className="field">Bulan

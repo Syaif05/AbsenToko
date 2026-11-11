@@ -60,15 +60,15 @@ function readEvidence(at: string, row?: EvidenceRow): Evidence {
 
 export async function loadDashboard(date: string, signal: AbortSignal): Promise<{ employees: Employee[]; records: Attendance[]; stores: Store[] }> {
   const [people, attendance, stores] = await Promise.all([
-    client().from('employees').select('id,name,is_active,store_id').order('name').abortSignal(signal),
+    client().from('employees').select('id,name,is_active,store_id,archived_at').order('name').abortSignal(signal),
     client().from('attendance').select('employee_id,store_id,work_date,check_in_at,check_out_at,attendance_evidence(id,type,latitude,longitude,accuracy_m)')
       .eq('work_date', date).abortSignal(signal),
-    client().from('stores').select('id,name').order('name').abortSignal(signal),
+    client().from('stores').select('id,name,archived_at').order('name').abortSignal(signal),
   ])
   if (people.error || attendance.error || stores.error) throw new Error('Rekap belum bisa dimuat. Coba lagi.')
   return {
-    employees: people.data.map(row => ({ id: row.id, name: row.name, active: row.is_active, storeId: row.store_id })),
-    stores: stores.data,
+    employees: people.data.map(row => ({ id: row.id, name: row.name, active: row.is_active, storeId: row.store_id, archivedAt: row.archived_at })),
+    stores: stores.data.map(row => ({ id: row.id, name: row.name, archivedAt: row.archived_at })),
     records: (attendance.data as AttendanceRow[]).map(row => ({
       employeeId: row.employee_id, storeId: row.store_id,
       workDate: row.work_date,
@@ -100,17 +100,18 @@ export const setEmployeeActive = (id: string, active: boolean) => invoke(active 
 export const saveStore = (id: string, name: string, creating: boolean) => invoke(creating ? 'create_store' : 'rename_store', id, { name })
 
 
-export const inviteEmployee = (id: string) => invoke<{ invitation: string }>('invite', id)
+export const archiveEmployee = (id: string) => invoke('archive_employee', id)
+export const archiveStore = (id: string) => invoke('archive_store', id)
 
 export async function loadScheduleDirectory() {
   const [people, stores] = await Promise.all([
-    client().from('employees').select('id,name,is_active,store_id').order('name'),
-    client().from('stores').select('id,name').order('name'),
+    client().from('employees').select('id,name,is_active,store_id,archived_at').order('name'),
+    client().from('stores').select('id,name,archived_at').order('name'),
   ])
   if (people.error || stores.error) throw new Error('Daftar toko dan karyawan belum bisa dimuat.')
   return {
-    employees: people.data.map(row => ({ id: row.id, name: row.name, active: row.is_active, storeId: row.store_id })),
-    stores: stores.data as Store[],
+    employees: people.data.map(row => ({ id: row.id, name: row.name, active: row.is_active, storeId: row.store_id, archivedAt: row.archived_at })),
+    stores: stores.data.map(row => ({ id: row.id, name: row.name, archivedAt: row.archived_at } as Store)),
   }
 }
 

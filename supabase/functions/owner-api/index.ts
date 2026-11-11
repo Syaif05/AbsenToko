@@ -6,8 +6,6 @@ const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE
 const origins = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(value => value.trim()).filter(Boolean)
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-const hex = (bytes: Uint8Array) => Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
-const digest = async (value: string) => hex(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))))
 
 async function readBody(request: Request) {
   const reader = request.body?.getReader()
@@ -62,7 +60,7 @@ Deno.serve(async request => {
       return respond({ url: signed.data.signedUrl })
     }
 
-    if (!['create', 'rename', 'activate', 'deactivate', 'invite', 'create_store', 'rename_store'].includes(operation)) {
+    if (!['create', 'rename', 'activate', 'deactivate', 'archive_employee', 'archive_store', 'create_store', 'rename_store'].includes(operation)) {
       return respond({ error: 'Operasi tidak valid.' }, 400)
     }
     const name = typeof body.name === 'string' ? body.name.trim() : ''
@@ -74,17 +72,22 @@ Deno.serve(async request => {
     const limited = await admin.rpc('attendance_take_limit', { p_key: 'owner-write:' + user.id, p_limit: 20, p_seconds: 60 })
     if (limited.error) return respond({ error: 'Layanan belum tersedia.' }, 503)
     if (!limited.data) return respond({ error: 'Terlalu banyak perubahan. Coba lagi sebentar.' }, 429)
-    const invitation = operation === 'invite' ? hex(crypto.getRandomValues(new Uint8Array(32))) : null
     const result = await admin.rpc('owner_manage_staff', {
       p_owner: user.id, p_id: id, p_store: body.store_id ?? null, p_operation: operation,
-      p_name: name || null, p_invite: invitation ? await digest(invitation) : null,
+      p_name: name || null, p_invite: null,
     })
     if (result.error) {
+      if (result.error.message === 'store has employees') {
+        return respond({ error: 'Pindahkan atau hapus semua karyawan dari toko ini terlebih dahulu.' }, 409)
+      }
+      if (operation.endsWith('_store') && result.error.code === '23505') {
+        return respond({ error: 'Nama toko sudah dipakai.' }, 409)
+      }
       return respond({ error: operation === 'create' && result.error.code === '23505'
         ? 'Karyawan mungkin sudah tersimpan. Perbarui daftar sebelum mencoba lagi.'
         : 'Perubahan belum dikonfirmasi. Perbarui daftar sebelum mencoba lagi.' }, 409)
     }
-    return respond({ invitation })
+    return respond({ ok: true })
   } catch {
     return respond({ error: 'Layanan Owner belum tersedia. Coba lagi.' }, 503)
   }
