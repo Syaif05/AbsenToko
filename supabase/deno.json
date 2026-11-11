@@ -1,0 +1,8 @@
+{
+  "nodeModulesDir": "none",
+  "compilerOptions": { "strict": true },
+  "tasks": {
+    "check": "deno check functions/attendance-api/index.ts functions/owner-api/index.ts scripts/cleanup.ts",
+    "test": "deno test tests/pin_test.ts"
+  }
+}

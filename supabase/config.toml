@@ -1,0 +1,9 @@
+project_id = "absentoko"
+
+[functions.attendance-api]
+# Karyawan memakai sesi PIN, bukan JWT Supabase Auth. Handler memvalidasi token scoped.
+verify_jwt = false
+
+[functions.owner-api]
+# Validasi JWT dilakukan dengan Auth getUser agar mendukung signing keys baru.
+verify_jwt = false
