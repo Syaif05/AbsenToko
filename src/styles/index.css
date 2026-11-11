@@ -409,3 +409,32 @@ input::placeholder { color: #52655b; opacity: 1; }
 .directory-list li { padding: .9rem .15rem; border-top: 1px solid var(--border); }
 .directory-list li > div:first-child { min-width: 0; overflow-wrap: anywhere; }
 .directory-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+
+/* Employee portal: retain the tea palette and keep controls comfortable on phones. */
+.employee-entry { gap: 1.25rem; }
+.employee-entry .field { gap: .55rem; }
+.employee-entry select, .employee-schedule input { min-height: 48px; border-radius: .85rem; }
+.employee-home { gap: 1rem; }
+.employee-section-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.employee-section-heading h2 { font-size: 1.2rem; }
+.employee-section-heading h3 { font-size: 1rem; }
+.employee-date { font-size: .75rem; color: var(--muted); }
+.employee-footnote { font-size: .8rem; line-height: 1.6; }
+.employee-today { display: grid; gap: .3rem; padding: 1rem; background: #edf4e8; border-radius: .9rem; color: #234b36; }
+.employee-today span { font-size: .8rem; }
+.employee-calendar { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.calendar-weekday { text-align: center; font-size: .7rem; color: #526357; padding-bottom: .4rem; }
+.employee-day { min-height: 58px; border-radius: .65rem; background: #f5f6f2; display: grid; align-content: center; justify-items: center; gap: .2rem; font-size: .75rem; border: 1px solid transparent; }
+.employee-day strong { font-size: .85rem; }
+.employee-shift-P { background: #edf4ce; color: #3f5012; }
+.employee-shift-M { background: #e4f1e8; color: #1d5438; }
+.employee-shift-S { background: #fff0d8; color: #754a08; }
+.employee-shift-O { background: #eceafa; color: #53407c; }
+.employee-day-today { border: 2px solid #315b3c; }
+.employee-shift-legend { padding: 0; list-style: none; display: grid; gap: .5rem; font-size: .78rem; }
+.employee-shift-legend li { display: flex; align-items: center; gap: .6rem; }
+.employee-shift-legend b { display: grid; place-items: center; width: 24px; height: 24px; border-radius: .4rem; background: #eef2e9; }
+.tea-shell-account { align-items: start; }
+@media (min-width: 900px) { .tea-shell-account > .tea-hero { align-self: start; position: sticky; top: 1rem; } }
+@media (prefers-reduced-motion: no-preference) { .employee-home, .employee-entry { animation: employee-appear .25s ease-out; } }
+@keyframes employee-appear { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }

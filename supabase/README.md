@@ -165,3 +165,9 @@ Pindahkan atau arsipkan karyawan yang masih terdaftar sebelum menghapus tokonya.
 Migrasi `20261111150722_owner_attendance_reset.sql` menambah reset dari **Pengaturan → Reset Data Absensi**. Terapkan migrasi sebelum memasang ulang `owner-api` dan frontend.
 
 Owner harus mengetik `RESET` untuk menghapus seluruh catatan absensi dan bukti terkait. Reset mempertahankan akun, karyawan, toko, jadwal, dan nama aplikasi. Foto dihapus melalui Storage API. Jika penghapusan foto terhenti, ulangi di dialog yang sama untuk memakai tanda terima yang sama. Foto yang masih menunggu pembersihan tetap tercatat di tabel privat sampai Storage mengonfirmasi penghapusan.
+
+## Portal karyawan dan jadwal pribadi
+
+Karyawan memilih toko dan nama, lalu masuk ke menu absensi. Kalender **Jadwal Saya** membaca jadwal Owner per bulan melalui operasi `schedule` pada `attendance-api`. RPC `attendance_my_schedule` hanya dapat dipanggil service role; identitas dan toko diturunkan dari sesi yang masih aktif. Parameter employee/store dari browser tidak digunakan. Jadwal kosong bukan libur; kode O berarti libur. Jadwal tidak mengubah bukti atau status kehadiran aktual. Nama produk tetap Teh Idaman.
+
+Pengujian: `npm test` mencakup validasi endpoint dan `supabase/tests/employee_portal_schedule.sql` mencakup isolasi karyawan, batas bulan, sesi dicabut/kedaluwarsa, karyawan nonaktif, dan izin RPC. Jalankan SQL tersebut pada database pengujian setelah seluruh migrasi; transaksi di-rollback.

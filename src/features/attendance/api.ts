@@ -145,3 +145,13 @@ export async function submitEvidence(session: Session, attempt: Attempt): Promis
     latitude: location.latitude, longitude: location.longitude, accuracy_m: location.accuracy }, session.token)
   return checkedReceipt(receipt, attempt.action)
 }
+
+export type PersonalSchedule = {
+  employee: { id: string; name: string }
+  store: { id: string; name: string }
+  days: { date: string; code: 'P' | 'M' | 'S' | 'O' }[]
+}
+export async function mySchedule(account: Account, month: string): Promise<PersonalSchedule> {
+  if (demoMode) return { employee: account.employee, store: { id: 'demo', name: 'Toko Demo' }, days: [] }
+  return call<PersonalSchedule>('schedule', { month }, account.token)
+}

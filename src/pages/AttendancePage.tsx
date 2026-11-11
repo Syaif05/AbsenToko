@@ -1,3 +1,4 @@
+import { EmployeeSchedule } from '../features/attendance/EmployeeSchedule'
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link } from 'react-router'
@@ -92,7 +93,7 @@ export default function AttendancePage() {
     }
   }
 
-  function clearAccount(previous: Account, message = '') {
+  const clearAccount = useCallback((previous: Account, message = '') => {
     forgetAccount(previous)
     setAccount(null)
     setStatus(null)
@@ -100,7 +101,11 @@ export default function AttendancePage() {
     setConfirmation(null)
     setBusy(false)
     setError(message)
-  }
+  }, [])
+
+  const scheduleSessionEnded = useCallback((message: string) => {
+    if (account) clearAccount(account, message)
+  }, [account, clearAccount])
 
   function confirm(at: string) {
     if (!account || !action) return
@@ -166,14 +171,14 @@ export default function AttendancePage() {
       current = false
       document.removeEventListener('visibilitychange', refresh)
     }
-  }, [account, action, confirmation, busy, online, statusReload])
+  }, [account, action, confirmation, busy, online, statusReload, clearAccount])
 
   useEffect(() => {
     if (!account?.expiresAt || action || confirmation || busy) return
     const timer = window.setTimeout(() => clearAccount(account, 'Sesi habis. Pilih toko dan nama kembali.'),
       Math.max(0, account.expiresAt - Date.now()))
     return () => window.clearTimeout(timer)
-  }, [account, action, confirmation, busy])
+  }, [account, action, confirmation, busy, clearAccount])
 
   useEffect(() => {
     if (!account?.token) return
@@ -185,7 +190,7 @@ export default function AttendancePage() {
     }
     window.addEventListener('storage', syncLogout)
     return () => window.removeEventListener('storage', syncLogout)
-  }, [account])
+  }, [account, clearAccount])
 
   const expiry = account?.expiresAt ? new Date(account.expiresAt) : null
   const nextAction = session?.status.kind === 'NOT_CHECKED_IN' ? 'IN'
@@ -194,10 +199,10 @@ export default function AttendancePage() {
   return (
     <>
       <Header><Link className="button header-link" to="/owner/login">Masuk Owner</Link></Header>
-      <main className={'tea-shell' + (stage === 'capture' ? ' tea-shell-capture' : '')}>
+      <main className={'tea-shell' + (stage === 'capture' ? ' tea-shell-capture' : account ? ' tea-shell-account' : '')}>
         <TeaHero>
-          <p className="tea-eyebrow"><span aria-hidden="true" />Tim Kedai</p>
-          <h1 ref={pageHeading} tabIndex={-1}>Absensi karyawan</h1>
+          <p className="tea-eyebrow"><span aria-hidden="true" />Teh Idaman · Tim Kedai</p>
+          <h1 ref={pageHeading} tabIndex={-1}>{account ? 'Selamat bekerja!' : 'Mulai hari dengan semangat.'}</h1>
           <p className="tea-date">{displayDate(todayWib())} · WIB</p>
         </TeaHero>
         <div className="tea-workspace">
@@ -213,33 +218,37 @@ export default function AttendancePage() {
               <h2 ref={formHeading} tabIndex={-1}>{demoMode ? 'Absensi demo berhasil' : 'Absensi berhasil'}</h2>
               <p>{confirmation.employee.name} · {actionLabels[confirmation.action]}</p>
               <p className="confirmation-time">{displayTime(confirmation.at)} <small>WIB</small></p>
-              <button className="button button-primary w-full" type="button" onClick={() => setConfirmation(null)}>Kembali ke Akun</button>
+              <button className="button button-primary w-full" type="button" onClick={() => setConfirmation(null)}>Kembali ke Menu Absen</button>
             </section>
           ) : account ? (
+            <div className="employee-home stack">
             <section className="panel stack account-panel">
               <div className="account-heading">
                 <span className="avatar" aria-hidden="true">{Array.from(account.employee.name)[0]?.toLocaleUpperCase('id')}</span>
-                <div><p className="panel-kicker">Akun karyawan</p><h2 ref={formHeading} tabIndex={-1}>{account.employee.name}</h2></div>
+                <div><p className="panel-kicker">Menu absensi</p><h2 ref={formHeading} tabIndex={-1}>{account.employee.name}</h2></div>
               </div>
               <p className="muted">{expiry ? 'Sesi berlaku sampai ' + (todayWib(expiry) === todayWib() ? '' : displayDate(todayWib(expiry)) + ', ') + displayTime(expiry.toISOString()) + ' WIB' : ''}</p>
               {accountNotice && <Notice>{accountNotice}</Notice>}
               {accountError && <Notice tone="error">{accountError}</Notice>}
+              <div className="employee-section-heading"><h3>Absensi hari ini</h3><span className="employee-date">WIB</span></div>
               {status ? <AttendanceStatus status={status} /> : online && !accountError && <Loading label="Memuat status absensi…" />}
               {nextAction && (
                 <button className="button button-primary w-full" type="button" disabled={!online || busy} onClick={startAttendance}>
-                  {actionLabels[nextAction]}
+                  {busy ? 'Memeriksa status…' : actionLabels[nextAction]}
                 </button>
               )}
               <button className="button button-secondary w-full" type="button" disabled={!online || busy}
                 onClick={() => setStatusReload(value => value + 1)}>Perbarui Status</button>
               <button className="button button-quiet w-full" type="button" disabled={!online || busy} onClick={logout}>Keluar Akun</button>
             </section>
+            <EmployeeSchedule account={account} online={online} onSessionEnded={scheduleSessionEnded} />
+            </div>
           ) : (
-            <section className="panel stack" aria-labelledby="employee-login-title">
+            <section className="panel stack employee-entry" aria-labelledby="employee-login-title">
               <div className="panel-intro">
                 <p className="panel-kicker">Portal karyawan</p>
-                <h2 id="employee-login-title">Hai, tim!</h2>
-                <p className="muted">Pilih toko dan nama Anda untuk mulai absen.</p>
+                <h2 id="employee-login-title">Masuk Karyawan</h2>
+                <p className="muted">Pilih tempat kerja dan nama Anda. Setelah masuk, absensi dan jadwal tersedia di satu tempat.</p>
               </div>
               {error && <Notice tone="error">{error}</Notice>}
               {directoryError ? <>
@@ -251,7 +260,7 @@ export default function AttendancePage() {
               </> : !stores ? <Loading label="Memuat toko…" /> : stores.length === 0
                 ? <Notice>Belum ada toko yang tersedia. Hubungi Owner.</Notice>
                 : <form className="stack" onSubmit={verify}>
-                  <label className="field">Pilih toko
+                  <label className="field"><span>01 · Pilih toko</span>
                     <select required value={storeId} disabled={verifying || !online} onChange={event => {
                       setStoreId(event.target.value)
                       setEmployeeId('')
@@ -273,14 +282,16 @@ export default function AttendancePage() {
                     ? <EmployeeSelector employees={staff} value={employeeId} onChange={setEmployeeId} disabled={verifying || !online} />
                     : <Notice>Belum ada karyawan aktif di toko ini.</Notice>
                     : <Loading label="Memuat karyawan…" />)}
+                  {!storeId && <label className="field"><span>02 · Pilih nama</span><select disabled><option>Pilih toko terlebih dahulu</option></select></label>}
                   {!demoMode && <label className="remember-account">
                     <input type="checkbox" checked={remember} onChange={event => setRemember(event.target.checked)} disabled={verifying} />
                     <span>Ingat saya di perangkat ini</span>
                   </label>}
                   <button className="button button-primary w-full" disabled={!online || verifying || !!staffError || !staff?.some(person => person.id === employeeId)}>
-                    {verifying ? 'Membuka absensi…' : 'Lanjutkan Absen'}
+                    {verifying ? 'Membuka absensi…' : 'Masuk ke Menu Absen'}
                   </button>
                 </form>}
+              <p className="muted employee-footnote">Gunakan nama Anda sendiri. Foto dan lokasi diminta saat melakukan absensi.</p>
             </section>
           )}
           {demoMode && <footer className="demo-footer">

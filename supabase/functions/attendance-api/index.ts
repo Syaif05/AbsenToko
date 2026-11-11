@@ -131,6 +131,10 @@ Deno.serve(async request => {
     if (!token || !/^[0-9a-f]{64}$/.test(token)) throw new Failure(401, 'Pilih toko dan nama terlebih dahulu.')
     const hash = await digest(encoder.encode(token))
     await limit('session:' + hash, 30, 60)
+    if (body.operation === 'schedule') {
+      if (typeof body.month !== 'string' || !/^20\d\d-(0[1-9]|1[0-2])$/.test(body.month)) throw new Failure(400, 'Bulan jadwal tidak valid.')
+      return respond(await rpc('attendance_my_schedule', { p_hash: hash, p_month: body.month + '-01' }))
+    }
     if (body.operation === 'status') return respond(await rpc('attendance_status', { p_hash: hash }))
     if (body.operation === 'logout') {
       await rpc('attendance_end_session', { p_hash: hash })
