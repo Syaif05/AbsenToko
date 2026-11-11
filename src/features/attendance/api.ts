@@ -1,5 +1,5 @@
 import * as demo from '../demo/store'
-import type { Action, AttendanceStatus, Employee, Location } from './types'
+import type { Action, AttendanceStatus, Employee, Location, Store } from './types'
 
 export const demoMode = import.meta.env.VITE_ATTENDANCE_MODE === 'demo'
 export type Account = { employee: Employee; token?: string; expiresAt?: number }
@@ -72,15 +72,20 @@ function readStatus({ status, attendance }: StatusResponse): AttendanceStatus {
   }
 }
 
-export async function listEmployees(): Promise<Employee[]> {
+export async function listStores(): Promise<Store[]> {
+  if (demoMode) return [{ id: 'demo', name: 'Toko Demo' }]
+  return (await call<{ stores: Store[] }>('stores')).stores
+}
+
+export async function listEmployees(storeId: string): Promise<Employee[]> {
   if (demoMode) return demo.listActiveEmployees()
-  const { employees } = await call<{ employees: Pick<Employee, 'id' | 'name'>[] }>('list')
-  return employees.map(employee => ({ ...employee, active: true }))
+  const { employees } = await call<{ employees: Pick<Employee, 'id' | 'name'>[] }>('list', { store_id: storeId })
+  return employees.map(employee => ({ ...employee, active: true, storeId }))
 }
 
 export async function verifyEmployee(employee: Employee, pin: string): Promise<Session> {
   if (demoMode) return demo.verifyPin(employee.id, pin)
-  const result = await call<StatusResponse & { token: string; expires_at: string }>('verify', { employee_id: employee.id, pin })
+  const result = await call<StatusResponse & { token: string; expires_at: string }>('verify', { employee_id: employee.id, store_id: employee.storeId, pin })
   const expiresAt = Date.parse(result.expires_at)
   if (!tokenPattern.test(result.token) || !Number.isFinite(expiresAt)) throw new Error('Sesi absensi tidak valid.')
   return { employee, status: readStatus(result), token: result.token, expiresAt }

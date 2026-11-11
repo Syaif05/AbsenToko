@@ -78,3 +78,19 @@ Foto dibuka dari bucket privat melalui URL bertanda tangan yang berlaku 60 detik
 3. Pastikan Vercel memakai commit terbaru. Uji dengan akun karyawan pada perangkat pribadi: masuk dengan PIN, muat ulang halaman, kirim absen masuk, kembali ke akun, lalu lakukan absen pulang tanpa memasukkan PIN lagi. **Keluar Akun** mencabut sesi; membuka kembali halaman kemudian meminta PIN.
 
 Browser hanya menyimpan token sesi, identitas karyawan, dan waktu kedaluwarsa bila opsi **Tetap masuk di perangkat ini** dicentang. PIN, foto dan lokasi tidak ikut tersimpan. Sesi baru berlaku sampai 24 jam; durasi khusus yang sebelumnya sudah diatur tetap dipertahankan. Pengaturan jendela absen pulang terpisah dari durasi login.
+
+## Pengelompokan toko
+
+1. Jalankan [migrasi toko](migrations/20261111054639_store_groups.sql) di **Supabase → SQL Editor** setelah migrasi sesi akun. Karyawan yang sudah ada masuk ke **Toko Utama**. Riwayat sebelum migrasi tetap terlihat di **Semua toko**, karena toko asalnya belum tercatat.
+2. Deploy ulang kedua Edge Function dari folder proyek terbaru dan pilih **Yes**:
+
+   ```sh
+   npx supabase@3.1.0 functions deploy attendance-api --remote=PROJECT_REF --use-api
+   npx supabase@3.1.0 functions deploy owner-api --remote=PROJECT_REF --use-api
+   ```
+
+3. Gunakan frontend dari commit pembaruan toko. Bila Vercel terhubung ke GitHub dan deploy otomatis, selesaikan langkah Supabase segera agar pilihan toko dapat dimuat.
+4. Di dashboard, buka **Kelola Karyawan → Kelola Toko**. Buat toko, lalu pilih penempatannya saat tambah/edit karyawan. Karyawan tanpa toko belum muncul di pilihan absensi. Pemindahan mencabut sesi lama dan tidak memindahkan riwayat absensi.
+5. Untuk menetapkan PIN, buka **Edit → Ubah PIN** dan isi 6–12 angka, atau kosongkan untuk PIN acak. PIN baru ditampilkan sekali. PIN lama hanya disimpan sebagai hash dan tidak dapat dilihat kembali.
+
+Uji migrasi di staging dengan [uji toko](tests/store_groups.sql). Uji membuat data sementara dan mengembalikannya dengan rollback.

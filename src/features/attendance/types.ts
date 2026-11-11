@@ -1,9 +1,11 @@
-export type Employee = { id: string; name: string; active: boolean }
+export type Employee = { id: string; name: string; active: boolean; storeId?: string | null }
+export type Store = { id: string; name: string }
 export type Action = 'IN' | 'OUT'
 export type Location = { latitude: number; longitude: number; accuracy: number }
 export type Evidence = { id?: string; at: string; location?: Location; photo: Blob | null }
 export type Attendance = {
   employeeId: string
+  storeId?: string | null
   workDate: string
   checkIn: Evidence
   checkOut?: Evidence

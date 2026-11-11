@@ -9,9 +9,9 @@ import { EvidenceForm } from '../features/attendance/EvidenceForm'
 import { useOnline } from '../features/attendance/browser'
 import { displayDate, displayTime, todayWib } from '../features/attendance/dates'
 import { actionLabels } from '../features/attendance/types'
-import type { Action, AttendanceStatus as Status, Employee } from '../features/attendance/types'
+import type { Action, AttendanceStatus as Status, Employee, Store } from '../features/attendance/types'
 import { demoPin } from '../features/demo/store'
-import { demoMode, endAccount, forgetAccount, listEmployees, readSavedAccount, refreshStatus,
+import { demoMode, endAccount, forgetAccount, listEmployees, listStores, readSavedAccount, refreshStatus,
   saveAccount, savedAccountKey, SessionEnded, verifyEmployee } from '../features/attendance/api'
 import type { Account } from '../features/attendance/api'
 
@@ -24,6 +24,11 @@ type Confirmation = { action: Action; at: string; employee: Employee }
 export default function AttendancePage() {
   const [list, setList] = useState<EmployeeList>({ kind: 'loading' })
   const [reload, setReload] = useState(0)
+  const [stores, setStores] = useState<Store[]>([])
+  const [storeId, setStoreId] = useState('')
+  const [storeError, setStoreError] = useState('')
+  const [storeLoading, setStoreLoading] = useState(true)
+  const [storeReload, setStoreReload] = useState(0)
   const [employeeId, setEmployeeId] = useState('')
   const [pin, setPin] = useState('')
   const [visible, setVisible] = useState(false)
@@ -48,13 +53,24 @@ export default function AttendancePage() {
   useEffect(() => {
     if (account) return
     let current = true
-    listEmployees().then((employees) => {
+    listStores().then(data => {
+      if (current) { setStores(data); setStoreError(''); setStoreLoading(false) }
+    }, (error: unknown) => {
+      if (current) { setStoreError(errorMessage(error, 'Daftar toko belum tersedia.')); setStoreLoading(false) }
+    })
+    return () => { current = false }
+  }, [account, storeReload])
+
+  useEffect(() => {
+    if (account || !storeId) return
+    let current = true
+    listEmployees(storeId).then((employees) => {
       if (current) setList({ kind: 'ready', employees })
     }, (error: unknown) => {
       if (current) setList({ kind: 'error', message: errorMessage(error, 'Daftar karyawan belum bisa dimuat.') })
     })
     return () => { current = false }
-  }, [reload, account])
+  }, [reload, account, storeId])
 
   useEffect(() => {
     if (stage === previousStage.current) return
@@ -230,10 +246,27 @@ export default function AttendancePage() {
               <div className="panel-intro">
                 <p className="panel-kicker">Portal karyawan</p>
                 <h2 id="employee-login-title">Hai, tim!</h2>
-                <p className="muted">Pilih nama dan masukkan PIN untuk mulai absen.</p>
+                <p className="muted">Pilih toko, nama, lalu masukkan PIN.</p>
               </div>
-              {list.kind === 'loading' && <Loading label="Memuat daftar karyawan…" />}
-              {list.kind === 'error' && (
+              {storeLoading && <Loading label="Memuat daftar toko…" />}
+              {storeError && <>
+                <Notice tone="error">{storeError}</Notice>
+                <button className="button button-secondary" type="button" onClick={() => {
+                  setStoreError(''); setStoreLoading(true); setStoreReload(value => value + 1)
+                }}>Muat Ulang Toko</button>
+              </>}
+              {!storeLoading && !storeError && (stores.length ? (
+                <label className="field"><span>Toko</span>
+                  <select value={storeId} disabled={verifying} onChange={event => {
+                    setStoreId(event.target.value); setList({ kind: 'loading' }); setEmployeeId(''); setPin(''); setError('')
+                  }}>
+                    <option value="">Pilih toko Anda</option>
+                    {stores.map(store => <option key={store.id} value={store.id}>{store.name}</option>)}
+                  </select>
+                </label>
+              ) : <Notice>Belum ada toko. Hubungi Owner.</Notice>)}
+              {storeId && list.kind === 'loading' && <Loading label="Memuat daftar karyawan…" />}
+              {storeId && list.kind === 'error' && (
                 <>
                   <Notice tone="error">{list.message}</Notice>
                   <button className="button button-secondary w-full" type="button" disabled={!online} onClick={() => {
@@ -242,7 +275,7 @@ export default function AttendancePage() {
                   }}>Coba Lagi</button>
                 </>
               )}
-              {list.kind === 'ready' && (list.employees.length ? (
+              {storeId && list.kind === 'ready' && (list.employees.length ? (
                 <form className="stack" onSubmit={verify}>
                   <EmployeeSelector employees={list.employees} value={employeeId} onChange={(value) => {
                     setEmployeeId(value)

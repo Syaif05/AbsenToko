@@ -67,13 +67,17 @@ Deno.serve(async request => {
       return respond({ url: signed.data.signedUrl })
     }
 
-    if (!['create', 'rename', 'activate', 'deactivate', 'reset_pin'].includes(operation)) {
+    if (!['create', 'rename', 'activate', 'deactivate', 'reset_pin', 'create_store', 'rename_store'].includes(operation)) {
       return respond({ error: 'Operasi tidak valid.' }, 400)
     }
     const name = typeof body.name === 'string' ? body.name.trim() : ''
-    if (['create', 'rename'].includes(operation) && (!name || name.length > 80 || /\p{Cc}/u.test(name))) {
+    if (['create', 'rename', 'create_store', 'rename_store'].includes(operation) && (!name || name.length > 80 || /\p{Cc}/u.test(name))) {
       return respond({ error: 'Nama harus berisi 1–80 karakter.' }, 400)
     }
+    if (['create', 'rename'].includes(operation) && body.store_id !== null &&
+      (typeof body.store_id !== 'string' || !uuid.test(body.store_id))) return respond({ error: 'Toko tidak valid.' }, 400)
+    if (operation === 'reset_pin' && body.pin !== undefined &&
+      (typeof body.pin !== 'string' || !/^\d{6,12}$/.test(body.pin))) return respond({ error: 'PIN harus terdiri dari 6–12 angka.' }, 400)
     const limited = await admin.rpc('attendance_take_limit', { p_key: 'owner-write:' + user.id, p_limit: 20, p_seconds: 60 })
     if (limited.error) return respond({ error: 'Layanan belum tersedia.' }, 503)
     if (!limited.data) return respond({ error: 'Terlalu banyak perubahan. Coba lagi sebentar.' }, 429)
@@ -87,10 +91,15 @@ Deno.serve(async request => {
 
     let pin: string | null = null
     if (operation === 'create' || operation === 'reset_pin') {
-      do { pin = newPin() } while (previousHash && await verifyPin(pin, previousHash))
+      if (operation === 'reset_pin' && typeof body.pin === 'string') {
+        if (previousHash && await verifyPin(body.pin, previousHash)) return respond({ error: 'Pilih PIN yang berbeda dari PIN saat ini.' }, 400)
+        pin = body.pin
+      } else {
+        do { pin = newPin() } while (previousHash && await verifyPin(pin, previousHash))
+      }
     }
-    const result = await admin.rpc('owner_manage_employee', {
-      p_owner: user.id, p_employee: id, p_operation: operation, p_name: name || null,
+    const result = await admin.rpc('owner_manage_store_assignment', {
+      p_owner: user.id, p_id: id, p_store: body.store_id ?? null, p_operation: operation, p_name: name || null,
       p_pin_hash: pin ? await hashPin(pin) : null, p_previous_hash: previousHash,
     })
     if (result.error) {

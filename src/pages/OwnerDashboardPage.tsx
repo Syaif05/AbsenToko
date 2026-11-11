@@ -4,7 +4,7 @@ import { Header, Notice, errorMessage } from '../components/ui/shared'
 import { TeaHero } from '../components/ui/TeaHero'
 import { useOnline } from '../features/attendance/browser'
 import { displayDate, displayTime, todayWib } from '../features/attendance/dates'
-import type { Attendance, Employee } from '../features/attendance/types'
+import type { Attendance, Employee, Store } from '../features/attendance/types'
 import { loadDashboard } from '../features/owner/api'
 import { AttendanceDetail } from '../features/owner/AttendanceDetail'
 import { EmployeeManager } from '../features/owner/EmployeeManager'
@@ -43,7 +43,8 @@ function EmployeeRow({ employee, record, onClick }: {
 
 export default function OwnerDashboardPage({ onLogout }: { onLogout: () => Promise<void> }) {
   const [date, setDate] = useState(todayWib)
-  const [snapshot, setSnapshot] = useState<{ date: string; records: Attendance[]; employees: Employee[] }>()
+  const [snapshot, setSnapshot] = useState<{ date: string; records: Attendance[]; employees: Employee[]; stores: Store[] }>()
+  const [storeFilter, setStoreFilter] = useState('')
   const [revision, setRevision] = useState(0)
   const [loaded, setLoaded] = useState<{ date: string; revision: number }>()
   const [leaving, setLeaving] = useState(false)
@@ -53,13 +54,17 @@ export default function OwnerDashboardPage({ onLogout }: { onLogout: () => Promi
   const online = useOnline()
   const refreshing = loaded?.date !== date || loaded.revision !== revision
   const employees = snapshot?.employees ?? []
-  const records = snapshot?.date === date ? snapshot.records : []
+  const stores = snapshot?.stores ?? []
+  const allRecords = snapshot?.date === date ? snapshot.records : []
+  const records = storeFilter ? allRecords.filter(record => record.storeId === storeFilter) : allRecords
+  const hasOtherRecord = new Set(storeFilter ? allRecords.filter(record => record.storeId !== storeFilter).map(record => record.employeeId) : [])
   const hasData = snapshot?.date === date
   const byEmployee = new Map(records.map((record) => [record.employeeId, record]))
-  const active = employees.filter((employee) => employee.active)
+  const active = employees.filter((employee) => employee.active
+    && (!storeFilter || byEmployee.has(employee.id) || (employee.storeId === storeFilter && !hasOtherRecord.has(employee.id))))
   const checkedIn = active.filter((employee) => byEmployee.has(employee.id)).length
   const completed = active.filter((employee) => byEmployee.get(employee.id)?.checkOut).length
-  const visible = employees.filter((employee) => employee.active || byEmployee.has(employee.id))
+  const visible = employees.filter((employee) => active.includes(employee) || byEmployee.has(employee.id))
   const stats = [
     ['Total Karyawan Aktif', active.length, 'total'],
     ['Sudah Masuk', checkedIn, 'in'],
@@ -124,6 +129,12 @@ export default function OwnerDashboardPage({ onLogout }: { onLogout: () => Promi
           <div className="list-toolbar">
             <div><p className="panel-kicker">Rekap harian</p><h2 id="attendance-heading">Daftar absensi</h2><p className="muted">Pilih karyawan untuk melihat detail.</p></div>
             <div className="list-actions">
+              <label className="field"><span>Toko</span>
+                <select value={storeFilter} onChange={event => setStoreFilter(event.target.value)}>
+                  <option value="">Semua toko</option>
+                  {stores.map(store => <option key={store.id} value={store.id}>{store.name}</option>)}
+                </select>
+              </label>
               <label className="field"><span>Tanggal absensi</span>
                 <input type="date" value={date} max={todayWib()} onChange={(event) => {
                   const value = event.target.value
@@ -153,7 +164,7 @@ export default function OwnerDashboardPage({ onLogout }: { onLogout: () => Promi
         </footer>
       </main>
       {detail && <AttendanceDetail employee={detail} date={date} record={byEmployee.get(detail.id)} onClose={() => setDetail(null)} />}
-      {managing && <EmployeeManager employees={employees} onChange={refresh} onClose={() => setManaging(false)} />}
+      {managing && <EmployeeManager employees={employees} stores={stores} onChange={refresh} onClose={() => setManaging(false)} />}
     </>
   )
 }

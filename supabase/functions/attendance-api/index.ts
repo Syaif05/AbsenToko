@@ -80,21 +80,27 @@ Deno.serve(async request => {
       : null
     if (sourceHash) await limit('source:' + sourceHash, 60, 60)
     const body = await boundedJson(request)
+    if (body.operation === 'stores') {
+      const { data, error } = await client.from('stores').select('id,name').order('name')
+      if (error) throw new Failure(503, 'Daftar toko belum tersedia.')
+      return respond({ stores: data })
+    }
     if (body.operation === 'list') {
-      const { data, error } = await client.from('employees').select('id,name').eq('is_active', true).order('name').limit(100)
+      if (!uuid(body.store_id)) throw new Failure(400, 'Pilih toko terlebih dahulu.')
+      const { data, error } = await client.from('employees').select('id,name').eq('is_active', true).eq('store_id', body.store_id).order('name').limit(100)
       if (error) throw new Failure(503, 'Daftar karyawan belum tersedia.')
       return respond({ employees: data })
     }
     if (body.operation === 'verify') {
-      if (!uuid(body.employee_id) || typeof body.pin !== 'string' || !/^\d{6,12}$/.test(body.pin)) throw new Failure(400, 'Nama atau PIN tidak sesuai.')
+      if (!uuid(body.store_id) || !uuid(body.employee_id) || typeof body.pin !== 'string' || !/^\d{6,12}$/.test(body.pin)) throw new Failure(400, 'Nama atau PIN tidak sesuai.')
       await limit(sourceHash ? 'pin-source:' + sourceHash : 'pin-global', sourceHash ? 10 : 60, 60)
       await limit('identity:' + body.employee_id.toLowerCase(), 5, 60)
-      const { data, error } = await client.from('employees').select('id,pin_hash').eq('id', body.employee_id).eq('is_active', true).maybeSingle()
+      const { data, error } = await client.from('employees').select('id,pin_hash').eq('id', body.employee_id).eq('store_id', body.store_id).eq('is_active', true).maybeSingle()
       if (error) throw new Failure(503, 'Verifikasi belum tersedia.')
       if (!data || !await verifyPin(body.pin, data.pin_hash)) throw new Failure(401, 'Nama atau PIN tidak sesuai.')
       const token = hex(crypto.getRandomValues(new Uint8Array(32)).buffer)
       const hash = await digest(encoder.encode(token))
-      const expires_at = await rpc('attendance_issue_session', { p_employee: data.id, p_hash: hash, p_pin_hash: data.pin_hash })
+      const expires_at = await rpc('attendance_issue_store_session', { p_employee: data.id, p_hash: hash, p_pin_hash: data.pin_hash, p_store: body.store_id })
       const state = await rpc('attendance_status', { p_hash: hash })
       return respond({ token, expires_at, ...state })
     }
