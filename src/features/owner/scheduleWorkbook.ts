@@ -38,13 +38,29 @@ export async function downloadSchedule(store: Store, month: string, employees: E
       type: 'list', allowBlank: true, showErrorMessage: true, formulae: ['"P,M,S,O"'],
     }
   }
+  const example = book.addWorksheet('Contoh Pengisian')
+  example.mergeCells('A1:G1')
+  example.getCell('A1').value = 'Contoh saja. Isi jadwal sebenarnya di tab Jadwal.'
+  example.addRows([
+    ['Nama Karyawan', 1, 2, 3, 4, 5, 6],
+    ['Karyawan Contoh A', 'P', 'S', 'O', 'M', 'P', 'S'],
+    ['Karyawan Contoh B', 'S', 'P', 'M', 'O', 'S', 'P'],
+  ])
+  example.getColumn(1).width = 28
+  for (let column = 2; column <= 7; column++) example.getColumn(column).width = 7
+  example.getRow(2).font = { bold: true }
+  example.getRow(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9E5A4' } }
+  example.addRow([])
+  example.addRows(Object.entries(shifts).map(([code, label]) => [code + ' — ' + label]))
   const guide = book.addWorksheet('Petunjuk')
-  guide.getColumn(1).width = 74
+  guide.getColumn(1).width = 82
   guide.addRows([
-    ['Isi kode pada kolom tanggal di tab Jadwal.'],
-    ['Pertahankan ID karyawan, nama tab dan dua baris pertama.'],
-    ['Sel kosong tidak mengubah jadwal yang sudah tersimpan.'],
-    ...Object.entries(shifts).map(([code, label]) => [code + ' — ' + label]),
+    ['1. Lihat tab Contoh Pengisian.'],
+    ['2. Buka tab Jadwal dan isi kode P, M, S, atau O pada kolom tanggal.'],
+    ['3. Simpan sebagai .xlsx, unggah di Jadwal Karyawan, lalu periksa pratinjau.'],
+    ['4. Klik Simpan Jadwal setelah data sesuai.'],
+    ['Pertahankan ID karyawan, nama tab Jadwal, dan dua baris pertama.'],
+    ['Gunakan O untuk libur. Sel kosong mempertahankan jadwal yang sudah tersimpan.'],
   ])
   const bytes = await book.xlsx.writeBuffer()
   const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], {

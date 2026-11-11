@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link } from 'react-router'
+import { TransferIcon } from '../components/ui/TransferIcon'
 import { Header, Loading, Notice, errorMessage } from '../components/ui/shared'
 import { TeaHero } from '../components/ui/TeaHero'
 import { useOnline } from '../features/attendance/browser'
@@ -45,7 +46,9 @@ function EmployeeRow({ employee, record, onClick }: {
 }
 
 export default function OwnerDashboardPage({ onLogout }: { onLogout: () => Promise<void> }) {
-  const [exportFormat, setExportFormat] = useState<ReportFormat>('csv')
+  const [exportFormat, setExportFormat] = useState<ReportFormat>('xlsx')
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState('')
   const [date, setDate] = useState(todayWib)
   const [snapshot, setSnapshot] = useState<{ date: string; records: Attendance[]; employees: Employee[]; stores: Store[] }>()
   const [storeFilter, setStoreFilter] = useState('')
@@ -158,20 +161,26 @@ export default function OwnerDashboardPage({ onLogout }: { onLogout: () => Promi
           <div className="report-toolbar">
             <label className="field"><span>Format laporan</span>
               <select value={exportFormat} onChange={event => setExportFormat(event.target.value as ReportFormat)}>
-                <option value="csv">CSV (Excel / Sheets)</option>
+                <option value="xlsx">Excel (.xlsx)</option>
+                <option value="csv">CSV</option>
                 <option value="json">JSON</option>
                 <option value="print">PDF / Cetak</option>
               </select>
             </label>
-            <button className="button button-secondary" disabled={!hasData || refreshing || !!error || !online} onClick={() => {
+            <button className="button button-secondary" disabled={!hasData || refreshing || !!error || exporting} onClick={async () => {
+              setExportError('')
+              setExporting(true)
               try {
-                exportReport(exportFormat, reportRows(visible, records, stores, date), date,
+                await exportReport(exportFormat, reportRows(visible, records, stores, date), date,
                   stores.find(store => store.id === storeFilter)?.name ?? 'Semua toko')
               } catch (error) {
-                setError(errorMessage(error, 'Laporan belum bisa diunduh.'))
+                setExportError(errorMessage(error, 'Laporan belum bisa diunduh.'))
+              } finally {
+                setExporting(false)
               }
-            }}>Export Laporan</button>
+            }}><TransferIcon direction="down" /> {exporting ? 'Menyiapkan…' : 'Unduh Laporan'}</button>
           </div>
+          {exportError && <Notice tone="error">{exportError}</Notice>}
           {!online && <Notice tone="warning">Koneksi terputus. Rekap diperbarui saat koneksi kembali.</Notice>}
           {error && <Notice tone="error">{error}</Notice>}
           {online && refreshing && <p role="status" className="empty-state">Memuat rekap…</p>}

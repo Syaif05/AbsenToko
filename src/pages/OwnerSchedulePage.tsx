@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
+import { TransferIcon } from '../components/ui/TransferIcon'
 import { Header, Loading, Notice, errorMessage } from '../components/ui/shared'
 import { todayWib } from '../features/attendance/dates'
 import { importShifts, loadScheduleDirectory, loadShifts } from '../features/owner/api'
@@ -7,6 +8,7 @@ import type { ShiftCell } from '../features/owner/api'
 import { downloadSchedule, monthDays, readSchedule, shifts, validMonth } from '../features/owner/scheduleWorkbook'
 
 export default function OwnerSchedulePage() {
+  const uploadInput = useRef<HTMLInputElement>(null)
   const [directory, setDirectory] = useState<Awaited<ReturnType<typeof loadScheduleDirectory>>>()
   const [storeId, setStoreId] = useState('')
   const [month, setMonth] = useState(() => todayWib().slice(0, 7))
@@ -84,21 +86,25 @@ export default function OwnerSchedulePage() {
               onChange={event => { resetPreview(); setMonth(event.target.value) }} />
           </label>
         </div>
-        <div className="schedule-controls">
+        <div className="manage-actions">
           <button className="button button-secondary" disabled={busy || !current || !employees.length}
-            onClick={() => { if (store) void run(() => downloadSchedule(store, month, employees, cells)) }}>Unduh Template Excel</button>
-          <label className="field">Unggah Jadwal Excel
-            <input type="file" accept=".xlsx" disabled={busy || !current || !employees.length} onChange={event => {
-              const file = event.target.files?.[0]
-              event.target.value = ''
-              if (file && store) {
-                setPending([])
-                void run(async () => setPending(await readSchedule(file, store, month, employees)))
-              }
-            }} />
-          </label>
+            onClick={() => { if (store) void run(() => downloadSchedule(store, month, employees, cells)) }}>
+            <TransferIcon direction="down" /> Unduh Template Excel
+          </button>
+          <button className="button button-primary" disabled={busy || !current || !employees.length}
+            onClick={() => uploadInput.current?.click()}>
+            <TransferIcon direction="up" /> Unggah Jadwal
+          </button>
+          <input ref={uploadInput} type="file" accept=".xlsx" hidden onChange={event => {
+            const file = event.target.files?.[0]
+            event.target.value = ''
+            if (file && store) {
+              setPending([])
+              void run(async () => setPending(await readSchedule(file, store, month, employees)))
+            }
+          }} />
         </div>
-        <p className="muted">Isi template di Excel atau Google Sheets. Unduh sebagai .xlsx, lalu unggah di sini.</p>
+        <p className="muted">Lihat tab Contoh Pengisian, lalu isi tab Jadwal di Excel atau Google Sheets. Unggah file .xlsx untuk melihat pratinjau.</p>
         {error && <Notice tone="error">{error}</Notice>}
         {message && <Notice tone="success">{message}</Notice>}
         {pending.length > 0 && <div className="stack">

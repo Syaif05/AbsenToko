@@ -1,6 +1,6 @@
 import type { Attendance, Employee, Store } from '../attendance/types'
 
-export type ReportFormat = 'csv' | 'json' | 'print'
+export type ReportFormat = 'xlsx' | 'csv' | 'json' | 'print'
 const timestamp = new Intl.DateTimeFormat('id-ID', {
   timeZone: 'Asia/Jakarta', dateStyle: 'short', timeStyle: 'short',
 })
@@ -29,7 +29,7 @@ export function csvCell(value: string) {
   return '"' + safe.replaceAll('"', '""') + '"'
 }
 
-export function exportReport(format: ReportFormat, rows: ReturnType<typeof reportRows>, date: string, store: string) {
+export async function exportReport(format: ReportFormat, rows: ReturnType<typeof reportRows>, date: string, store: string) {
   const headers = ['Tanggal', 'Nama', 'Toko', 'Status', 'Masuk (WIB)', 'Pulang (WIB)']
   if (format === 'print') {
     const popup = window.open('', '_blank')
@@ -65,12 +65,26 @@ export function exportReport(format: ReportFormat, rows: ReturnType<typeof repor
     doc.close()
     return
   }
-  const content = format === 'json'
-    ? JSON.stringify({ tanggal: date, toko: store, zonaWaktu: 'Asia/Jakarta', data: rows }, null, 2)
-    : '\uFEFF' + [headers, ...rows.map(row => Object.values(row))].map(row => row.map(csvCell).join(',')).join('\r\n')
-  const url = URL.createObjectURL(new Blob([content], {
-    type: format === 'json' ? 'application/json;charset=utf-8' : 'text/csv;charset=utf-8',
-  }))
+  let file: Blob
+  if (format === 'xlsx') {
+    const { default: ExcelJS } = await import('exceljs')
+    const book = new ExcelJS.Workbook()
+    const sheet = book.addWorksheet('Absensi', { views: [{ state: 'frozen', ySplit: 1 }] })
+    sheet.addRow(headers).font = { bold: true }
+    const widths = [15, 28, 26, 22, 24, 24]
+    widths.forEach((width, index) => { sheet.getColumn(index + 1).width = width })
+    sheet.addRows(rows.map(row => Object.values(row)))
+    sheet.autoFilter = 'A1:F1'
+    file = new Blob([new Uint8Array(await book.xlsx.writeBuffer())], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+  } else {
+    const content = format === 'json'
+      ? JSON.stringify({ tanggal: date, toko: store, zonaWaktu: 'Asia/Jakarta', data: rows }, null, 2)
+      : '\uFEFF' + [headers, ...rows.map(row => Object.values(row))].map(row => row.map(csvCell).join(',')).join('\r\n')
+    file = new Blob([content], { type: format === 'json' ? 'application/json;charset=utf-8' : 'text/csv;charset=utf-8' })
+  }
+  const url = URL.createObjectURL(file)
   const link = document.createElement('a')
   link.href = url
   link.download = 'absensi-' + date + '.' + format
