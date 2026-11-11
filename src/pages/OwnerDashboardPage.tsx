@@ -1,208 +1,331 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { TransferIcon } from '../components/ui/TransferIcon'
-import { Header, Loading, Notice, errorMessage } from '../components/ui/shared'
-import { TeaHero } from '../components/ui/TeaHero'
+import { Loading, Notice, errorMessage } from '../components/ui/shared'
 import { useOnline } from '../features/attendance/browser'
 import { displayDate, displayTime, todayWib } from '../features/attendance/dates'
-import type { Attendance, Employee, Store } from '../features/attendance/types'
+import type { Employee } from '../features/attendance/types'
 import { exportReport, reportRows } from '../features/owner/report'
 import type { ReportFormat } from '../features/owner/report'
 import { loadDashboard } from '../features/owner/api'
 import { Dialog } from '../components/ui/Dialog'
+import { dashboardRows } from '../features/owner/dashboard'
 
-const AttendanceDetail = lazy(() => import('../features/owner/AttendanceDetail').then(module => ({ default: module.AttendanceDetail })))
+const AttendanceDetail = lazy(() =>
+  import('../features/owner/AttendanceDetail').then((module) => ({
+    default: module.AttendanceDetail,
+  })),
+)
 
-const statIcons = {
-  total: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m20 0v-2a4 4 0 0 0-3-4M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0Zm5-4a4 4 0 0 1 0 8',
-  in: 'M12 5H5v14h7m-2-7h11m-4-4 4 4-4 4',
-  waiting: 'M12 7v5l3 2m6-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
-  out: 'm8 12 3 3 5-6m5 3a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
-}
-
-function initials(name: string) {
-  return name.split(/\s+/).slice(0, 2).map((word) => Array.from(word)[0]).join('').toLocaleUpperCase('id')
-}
-
-function EmployeeRow({ employee, record, onClick }: {
-  employee: Employee; record?: Attendance; onClick: () => void
-}) {
-  const state = record?.checkOut ? ['status-done', 'Selesai']
-    : record ? ['status-working', 'Sedang Bekerja'] : ['status-waiting', 'Belum Masuk']
-  return (
-    <li>
-      <button className="employee-row" type="button" onClick={onClick}>
-        <span className="employee-name">
-          <span className="avatar" aria-hidden="true">{initials(employee.name)}</span>
-          <span><strong>{employee.name}</strong>{!employee.active && <small>Nonaktif</small>}</span>
-        </span>
-        <span className={'status ' + state[0]}>{state[1]}</span>
-        <span className="row-time"><span>Masuk</span> <strong>{record ? displayTime(record.checkIn.at) : '—'}</strong></span>
-        <span className="row-time"><span>Pulang</span> <strong>{record?.checkOut ? displayTime(record.checkOut.at) : '—'}</strong></span>
-        <span className="row-arrow" aria-hidden="true">›</span>
-      </button>
-    </li>
-  )
-}
-
-export default function OwnerDashboardPage({ onLogout }: { onLogout: () => Promise<void> }) {
-  const [exportFormat, setExportFormat] = useState<ReportFormat>('xlsx')
+export default function OwnerDashboardPage() {
+  const [date, setDate] = useState(todayWib)
+  const [snapshot, setSnapshot] = useState<{
+    date: string
+    data: Awaited<ReturnType<typeof loadDashboard>>
+    at: string
+  }>()
+  const [store, setStore] = useState('')
+  const [query, setQuery] = useState('')
+  const [status, setStatus] = useState('all')
+  const [revision, setRevision] = useState(0)
+  const [settled, setSettled] = useState('')
+  const [error, setError] = useState('')
+  const [detail, setDetail] = useState<Employee>()
+  const [format, setFormat] = useState<ReportFormat>('xlsx')
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState('')
-  const [date, setDate] = useState(todayWib)
-  const [snapshot, setSnapshot] = useState<{ date: string; records: Attendance[]; employees: Employee[]; stores: Store[] }>()
-  const [storeFilter, setStoreFilter] = useState('')
-  const [revision, setRevision] = useState(0)
-  const [loaded, setLoaded] = useState<{ date: string; revision: number }>()
-  const [leaving, setLeaving] = useState(false)
-  const [detail, setDetail] = useState<Employee | null>(null)
-  const [error, setError] = useState('')
   const online = useOnline()
-  const refreshing = loaded?.date !== date || loaded.revision !== revision
-  const employees = snapshot?.employees ?? []
-  const stores = snapshot?.stores ?? []
-  const allRecords = snapshot?.date === date ? snapshot.records : []
-  const records = storeFilter ? allRecords.filter(record => record.storeId === storeFilter) : allRecords
-  const hasOtherRecord = new Set(storeFilter ? allRecords.filter(record => record.storeId !== storeFilter).map(record => record.employeeId) : [])
-  const hasData = snapshot?.date === date
-  const byEmployee = new Map(records.map((record) => [record.employeeId, record]))
-  const active = employees.filter((employee) => employee.active
-    && (!storeFilter || byEmployee.has(employee.id) || (employee.storeId === storeFilter && !hasOtherRecord.has(employee.id))))
-  const checkedIn = active.filter((employee) => byEmployee.has(employee.id)).length
-  const completed = active.filter((employee) => byEmployee.get(employee.id)?.checkOut).length
-  const activeIds = new Set(active.map(employee => employee.id))
-  const visible = employees.filter(employee => activeIds.has(employee.id) || byEmployee.has(employee.id))
+  const scope = date + ':' + revision
+  const loading = online && settled !== scope
+  const data = snapshot?.date === date ? snapshot.data : undefined
+  const rows = data ? dashboardRows(data.employees, data.records, store) : []
+  const visible = rows.filter(
+    (row) =>
+      row.employee.name.toLocaleLowerCase('id').includes(query.trim().toLocaleLowerCase('id')) &&
+      (status === 'all' || row.status === status),
+  )
+  const active = rows.filter((row) => row.employee.active && !row.employee.archivedAt)
+  const arrived = active.filter((row) => row.record).length
+  const completed = active.filter((row) => row.record?.checkOut).length
+  const percent = active.length ? Math.round((arrived / active.length) * 100) : 0
+  const storeNames = new Map(data?.stores.map((item) => [item.id, item.name]))
   const stats = [
-    ['Total Karyawan Aktif', active.length, 'total'],
-    ['Sudah Masuk', checkedIn, 'in'],
-    ['Belum Masuk', active.length - checkedIn, 'waiting'],
-    ['Sudah Pulang', completed, 'out'],
+    ['Karyawan aktif', active.length, '♙'],
+    ['Sudah masuk', arrived, '↗'],
+    ['Belum masuk', active.length - arrived, '◷'],
+    ['Sudah pulang', completed, '✓'],
   ] as const
 
   useEffect(() => {
     if (!online) return
     const controller = new AbortController()
-    void loadDashboard(date, controller.signal).then(data => {
-      if (controller.signal.aborted) return
-      setSnapshot({ date, ...data })
-      setError('')
-      setLoaded({ date, revision })
-    }, error => {
-      if (controller.signal.aborted) return
-      setError(errorMessage(error, 'Rekap belum bisa dimuat.'))
-      setLoaded({ date, revision })
-    })
+    void loadDashboard(date, controller.signal).then(
+      (result) => {
+        if (controller.signal.aborted) return
+        setSnapshot({ date, data: result, at: new Date().toISOString() })
+        setError('')
+        setSettled(scope)
+      },
+      (cause) => {
+        if (controller.signal.aborted) return
+        setError(errorMessage(cause, 'Rekap gagal dimuat.'))
+        setSettled(scope)
+      },
+    )
     return () => controller.abort()
-  }, [date, revision, online])
-
-  function refresh() {
-    setError('')
-    setRevision(value => value + 1)
-  }
-
-  async function logout() {
-    setLeaving(true)
-    try {
-      await onLogout()
-    } catch (error) {
-      setError(errorMessage(error, 'Belum bisa keluar.'))
-      setLeaving(false)
-    }
-  }
+  }, [date, scope, online])
 
   return (
-    <>
-      <Header><button className="button header-link" type="button" disabled={leaving} onClick={logout}>{leaving ? "Keluar…" : "Keluar"}</button></Header>
-      <main className="dashboard-shell">
-        <TeaHero variant="dashboard">
-          <p className="tea-eyebrow"><span aria-hidden="true" />Ruang Owner</p>
-          <h1>Dashboard</h1>
-          <p className="tea-date">{displayDate(date)} · WIB</p>
-          <nav className="manage-actions" aria-label="Menu Owner">
-          <Link className="button hero-action" to="/owner/jadwal">Jadwal Karyawan</Link>
-          <Link className="button hero-action" to="/owner/pengaturan">Pengaturan</Link>
-          <Link className="button hero-action" to="/owner/karyawan">Kelola Karyawan</Link>
-          <Link className="button hero-action" to="/owner/toko">Kelola Toko</Link>
-          </nav>
-        </TeaHero>
-        <section className="stats" aria-label="Ringkasan absensi karyawan aktif">
-          {stats.map(([label, value, tone]) => (
-            <article className={'stat stat-' + tone} key={label}>
-              <span className="stat-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                  <path d={statIcons[tone]} />
-                </svg>
-              </span>
-              <h2>{label}</h2><strong>{hasData ? value : "—"}</strong>
-            </article>
-          ))}
-        </section>
-        <section className="panel dashboard-panel" aria-labelledby="attendance-heading">
-          <div className="list-toolbar">
-            <div><p className="panel-kicker">Rekap harian</p><h2 id="attendance-heading">Daftar absensi</h2><p className="muted">Pilih karyawan untuk melihat detail.</p></div>
-            <div className="list-actions">
-              <label className="field"><span>Toko</span>
-                <select value={storeFilter} onChange={event => setStoreFilter(event.target.value)}>
-                  <option value="">Semua toko</option>
-                  {stores.map(store => <option key={store.id} value={store.id}>{store.name}{store.archivedAt ? ' (arsip)' : ''}</option>)}
-                </select>
-              </label>
-              <label className="field"><span>Tanggal absensi</span>
-                <input type="date" value={date} max={todayWib()} onChange={(event) => {
-                  const value = event.target.value
-                  if (value && event.target.validity.valid) { setError(''); setDate(value) }
-                }} />
-              </label>
-              <button className="button button-secondary" type="button" disabled={refreshing || !online} onClick={refresh}>
-                {refreshing ? 'Memuat…' : 'Perbarui'}
-              </button>
-            </div>
-          </div>
-          <div className="report-toolbar">
-            <label className="field"><span>Format laporan</span>
-              <select value={exportFormat} onChange={event => setExportFormat(event.target.value as ReportFormat)}>
-                <option value="xlsx">Excel (.xlsx)</option>
-                <option value="csv">CSV</option>
-                <option value="json">JSON</option>
-                <option value="print">PDF / Cetak</option>
-              </select>
-            </label>
-            <button className="button button-secondary" disabled={!hasData || refreshing || !!error || exporting} onClick={async () => {
-              setExportError('')
-              setExporting(true)
-              try {
-                await exportReport(exportFormat, reportRows(visible, records, stores, date), date,
-                  stores.find(store => store.id === storeFilter)?.name ?? 'Semua toko')
-              } catch (error) {
-                setExportError(errorMessage(error, 'Laporan belum bisa diunduh.'))
-              } finally {
-                setExporting(false)
+    <main className="dashboard-shell owner-dashboard">
+      <div className="owner-page-heading">
+        <div>
+          <p className="owner-eyebrow">AKTIVITAS TIM</p>
+          <h1>Ringkasan absensi</h1>
+          <p className="muted">Kehadiran tim, dalam satu tempat.</p>
+        </div>
+        <button
+          className="button button-secondary"
+          disabled={loading || !online}
+          onClick={() => setRevision((value) => value + 1)}
+        >
+          {loading ? 'Memuat…' : '↻ Perbarui data'}
+        </button>
+      </div>
+      <div className="owner-filters">
+        <label className="field">
+          Tanggal
+          <input
+            type="date"
+            value={date}
+            max={todayWib()}
+            onChange={(event) => {
+              if (event.target.value && event.target.validity.valid) {
+                setDate(event.target.value)
+                setDetail(undefined)
               }
-            }}><TransferIcon direction="down" /> {exporting ? 'Menyiapkan…' : 'Unduh Laporan'}</button>
+            }}
+          />
+        </label>
+        <label className="field">
+          Toko
+          <select
+            value={store}
+            onChange={(event) => {
+              setStore(event.target.value)
+              setDetail(undefined)
+            }}
+          >
+            <option value="">Semua toko</option>
+            <option value="unassigned">Toko historis belum tercatat</option>
+            {snapshot?.data.stores.map((item) => (
+              <option value={item.id} key={item.id}>
+                {item.name}
+                {item.archivedAt ? ' (arsip)' : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+        <span className="owner-updated">
+          {snapshot && data && 'Diperbarui ' + displayTime(snapshot.at) + ' WIB'}
+        </span>
+      </div>
+      {!online && (
+        <Notice tone="warning">
+          Anda sedang offline. Data terakhir ditampilkan. Sambungkan internet untuk memperbarui.
+        </Notice>
+      )}
+      {error && (
+        <Notice tone="error">{error} Gunakan tombol Perbarui data untuk mencoba kembali.</Notice>
+      )}
+      <section className="owner-stats" aria-label="Ringkasan karyawan aktif">
+        {stats.map(([label, value, icon]) => (
+          <article key={label}>
+            <span className="owner-stat-icon" aria-hidden="true">
+              {icon}
+            </span>
+            <p>{label}</p>
+            <strong>{data ? value : '—'}</strong>
+            <small>{displayDate(date)}</small>
+          </article>
+        ))}
+      </section>
+      <div className="owner-overview">
+        <section className="panel owner-progress">
+          <div>
+            <p className="owner-eyebrow">KEHADIRAN HARIAN</p>
+            <h2>
+              {data
+                ? `${arrived} dari ${active.length} karyawan sudah masuk`
+                : 'Menyiapkan ringkasan'}
+            </h2>
+            <p className="muted">{displayDate(date)} · WIB</p>
+            <div
+              className="owner-progress-track"
+              role="progressbar"
+              aria-label="Karyawan aktif sudah masuk"
+              aria-valuenow={percent}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
+              <span style={{ width: percent + '%' }} />
+            </div>
+            <small>Belum masuk berarti belum ada catatan pada tanggal ini.</small>
           </div>
-          {exportError && <Notice tone="error">{exportError}</Notice>}
-          {!online && <Notice tone="warning">Koneksi terputus. Rekap diperbarui saat koneksi kembali.</Notice>}
-          {error && <Notice tone="error">{error}</Notice>}
-          {online && refreshing && <p role="status" className="empty-state">Memuat rekap…</p>}
-          {hasData && !refreshing && records.length === 0 && <p className="empty-state">Belum ada absensi pada tanggal ini.</p>}
-          {hasData && visible.length > 0 && (
-            <>
-              <div className="list-columns" aria-hidden="true"><span>Karyawan</span><span>Status</span><span>Masuk</span><span>Pulang</span><span /></div>
-              <ul className="employee-list" aria-busy={refreshing}>
-                {visible.map((employee) => <EmployeeRow key={employee.id} employee={employee} record={byEmployee.get(employee.id)} onClick={() => setDetail(employee)} />)}
-              </ul>
-            </>
-          )}
+          <strong className="owner-percentage">{data ? percent + '%' : '—'}</strong>
         </section>
-        <footer className="dashboard-footer">
-          <Link to="/" className="button button-quiet">Buka Halaman Absensi</Link>
-        </footer>
-      </main>
-      {detail && <Suspense fallback={<Dialog title="Detail Absensi" onClose={() => setDetail(null)}>
-        <Loading label="Memuat detail absensi…" />
-      </Dialog>}>
-        <AttendanceDetail employee={detail} date={date} record={byEmployee.get(detail.id)} onClose={() => setDetail(null)} />
-      </Suspense>}
-    </>
+        <section className="panel owner-shortcuts">
+          <h2>Kelola tim</h2>
+          <Link to="/owner/karyawan">
+            Data karyawan <span>↗</span>
+          </Link>
+          <Link to="/owner/toko">
+            Daftar toko <span>↗</span>
+          </Link>
+          <Link to="/owner/jadwal">
+            Jadwal bulanan <span>↗</span>
+          </Link>
+        </section>
+      </div>
+      <section className="panel owner-records">
+        <div className="owner-page-heading">
+          <div>
+            <h2>Daftar kehadiran</h2>
+            <p className="muted">{data ? rows.length + ' karyawan dalam rekap' : 'Memuat rekap'}</p>
+          </div>
+          <div className="owner-export">
+            <label className="sr-only" htmlFor="export-format">
+              Format laporan
+            </label>
+            <select
+              id="export-format"
+              value={format}
+              onChange={(event) => setFormat(event.target.value as ReportFormat)}
+            >
+              <option value="xlsx">Excel</option>
+              <option value="csv">CSV</option>
+              <option value="json">JSON</option>
+              <option value="print">PDF / Cetak</option>
+            </select>
+            <button
+              className="button button-primary"
+              disabled={!data || loading || !!error || exporting}
+              onClick={async () => {
+                if (!data) return
+                setExporting(true)
+                setExportError('')
+                try {
+                  await exportReport(
+                    format,
+                    reportRows(
+                      visible.map((row) => row.employee),
+                      visible.flatMap((row) => (row.record ? [row.record] : [])),
+                      data.stores,
+                      date,
+                    ),
+                    date,
+                    storeNames.get(store) ??
+                      (store ? 'Toko historis belum tercatat' : 'Semua toko'),
+                  )
+                } catch (cause) {
+                  setExportError(errorMessage(cause, 'Unduhan gagal. Coba lagi.'))
+                } finally {
+                  setExporting(false)
+                }
+              }}
+            >
+              {exporting ? 'Menyiapkan…' : '↓ Unduh'}
+            </button>
+          </div>
+        </div>
+        <div className="owner-table-filters">
+          <label className="field">
+            <span className="sr-only">Cari karyawan</span>
+            <input
+              type="search"
+              placeholder="Cari nama karyawan…"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span className="sr-only">Filter status</span>
+            <select value={status} onChange={(event) => setStatus(event.target.value)}>
+              <option value="all">Semua status</option>
+              <option value="waiting">Belum masuk</option>
+              <option value="working">Sedang bekerja</option>
+              <option value="done">Selesai</option>
+            </select>
+          </label>
+        </div>
+        {exportError && <Notice tone="error">{exportError}</Notice>}
+        {loading && <Loading label="Memuat rekap absensi…" />}
+        {data && !loading && visible.length === 0 && (
+          <div className="empty-state">Tidak ada karyawan yang sesuai dengan filter.</div>
+        )}
+        {data && (
+          <>
+            <div className="owner-table-head" aria-hidden="true">
+              <span>Karyawan</span>
+              <span>Status</span>
+              <span>Masuk</span>
+              <span>Pulang</span>
+              <span />
+            </div>
+            <ul className="owner-attendance-list" aria-busy={loading}>
+              {visible.map(({ employee, record, status: state }) => (
+                <li key={employee.id}>
+                  <button onClick={() => setDetail(employee)} className="owner-attendance-row">
+                    <span className="owner-person">
+                      <span className="owner-avatar" aria-hidden="true">
+                        {employee.name.trim().slice(0, 2).toLocaleUpperCase('id')}
+                      </span>
+                      <span>
+                        <strong>{employee.name}</strong>
+                        <small>
+                          {storeNames.get((record ? record.storeId : employee.storeId) ?? '') ??
+                            (record ? 'Toko historis belum tercatat' : 'Belum ditempatkan')}
+                          {employee.archivedAt ? ' · Arsip' : !employee.active ? ' · Nonaktif' : ''}
+                        </small>
+                      </span>
+                    </span>
+                    <span className={'status status-' + state}>
+                      {state === 'done'
+                        ? 'Selesai'
+                        : state === 'working'
+                          ? 'Sedang bekerja'
+                          : 'Belum masuk'}
+                    </span>
+                    <span className="owner-time">
+                      <small>Masuk</small>
+                      {record ? displayTime(record.checkIn.at) : '—'}
+                    </span>
+                    <span className="owner-time">
+                      <small>Pulang</small>
+                      {record?.checkOut ? displayTime(record.checkOut.at) : '—'}
+                    </span>
+                    <span aria-hidden="true">↗</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </section>
+      {detail && (
+        <Suspense
+          fallback={
+            <Dialog title="Detail absensi" onClose={() => setDetail(undefined)}>
+              <Loading label="Memuat detail…" />
+            </Dialog>
+          }
+        >
+          <AttendanceDetail
+            employee={detail}
+            date={date}
+            record={data?.records.find((record) => record.employeeId === detail.id)}
+            onClose={() => setDetail(undefined)}
+          />
+        </Suspense>
+      )}
+    </main>
   )
 }

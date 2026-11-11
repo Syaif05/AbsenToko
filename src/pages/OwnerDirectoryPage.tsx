@@ -1,12 +1,22 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router'
 import { Dialog } from '../components/ui/Dialog'
-import { Header, Loading, Notice, errorMessage } from '../components/ui/shared'
+import { Loading, Notice, errorMessage } from '../components/ui/shared'
 import { useOnline } from '../features/attendance/browser'
 import type { Employee, Store } from '../features/attendance/types'
-import { archiveEmployee, archiveStore, createEmployee, loadScheduleDirectory, renameEmployee, saveStore, setEmployeeActive } from '../features/owner/api'
+import {
+  archiveEmployee,
+  archiveStore,
+  createEmployee,
+  loadScheduleDirectory,
+  renameEmployee,
+  saveStore,
+  setEmployeeActive,
+} from '../features/owner/api'
 
-type Editor = { kind: 'edit'; id: string; existing: boolean } | { kind: 'delete'; item: Store } | { kind: 'toggle'; item: Employee }
+type Editor =
+  | { kind: 'edit'; id: string; existing: boolean }
+  | { kind: 'delete'; item: Store }
+  | { kind: 'toggle'; item: Employee }
 
 export default function OwnerDirectoryPage({ mode }: { mode: 'employees' | 'stores' }) {
   const isStaff = mode === 'employees'
@@ -26,25 +36,38 @@ export default function OwnerDirectoryPage({ mode }: { mode: 'employees' | 'stor
 
   useEffect(() => {
     if (!online) return
+    const controller = new AbortController()
     let current = true
-    void loadScheduleDirectory().then(data => {
-      if (current) { setDirectory(data); setError('') }
-    }, error => {
-      if (current) setError(errorMessage(error, 'Daftar gagal dimuat.'))
-    })
-    return () => { current = false }
+    void loadScheduleDirectory(controller.signal).then(
+      (data) => {
+        if (current) {
+          setDirectory(data)
+          setError('')
+        }
+      },
+      (error) => {
+        if (current) setError(errorMessage(error, 'Daftar gagal dimuat.'))
+      },
+    )
+    return () => {
+      current = false
+      controller.abort()
+    }
   }, [online, revision])
 
-  const stores = directory?.stores.filter(store => !store.archivedAt) ?? []
-  const employees = directory?.employees.filter(person => !person.archivedAt) ?? []
-  const storeNames = new Map(stores.map(store => [store.id, store.name]))
+  const stores = directory?.stores.filter((store) => !store.archivedAt) ?? []
+  const employees = directory?.employees.filter((person) => !person.archivedAt) ?? []
+  const storeNames = new Map(stores.map((store) => [store.id, store.name]))
   const counts = new Map<string, number>()
   for (const person of employees) {
     if (person.storeId) counts.set(person.storeId, (counts.get(person.storeId) ?? 0) + 1)
   }
-  const matches = (value: string) => value.toLocaleLowerCase('id').includes(query.trim().toLocaleLowerCase('id'))
-  const people = employees.filter(person => matches(person.name) && (!filter || (person.storeId ?? 'none') === filter))
-  const shops = stores.filter(store => matches(store.name))
+  const matches = (value: string) =>
+    value.toLocaleLowerCase('id').includes(query.trim().toLocaleLowerCase('id'))
+  const people = employees.filter(
+    (person) => matches(person.name) && (!filter || (person.storeId ?? 'none') === filter),
+  )
+  const shops = stores.filter((store) => matches(store.name))
 
   function edit(item?: Store, placement?: string | null) {
     setName(item?.name ?? '')
@@ -74,7 +97,7 @@ export default function OwnerDirectoryPage({ mode }: { mode: 'employees' | 'stor
         setMessage(label + ' disimpan.')
       }
       setEditor(undefined)
-      setRevision(value => value + 1)
+      setRevision((value) => value + 1)
     } catch (error) {
       setDialogError(errorMessage(error, 'Perubahan gagal disimpan.'))
     } finally {
@@ -83,92 +106,216 @@ export default function OwnerDirectoryPage({ mode }: { mode: 'employees' | 'stor
   }
 
   function actions(item: Store, person?: Employee) {
-    return <div className="directory-actions">
-      <button className="button button-secondary" onClick={() => edit(item, person?.storeId)}>Edit</button>
-      {person && <button className="button button-quiet" onClick={() => {
-        setDialogError('')
-        setEditor({ kind: 'toggle', item: person })
-      }}>{person.active ? 'Nonaktifkan' : 'Aktifkan'}</button>}
-      <button className="button button-danger" aria-label={'Hapus ' + item.name} onClick={() => {
-        setDialogError('')
-        setEditor({ kind: 'delete', item })
-      }}>Hapus</button>
-    </div>
+    return (
+      <div className="directory-actions">
+        <button className="button button-secondary" onClick={() => edit(item, person?.storeId)}>
+          Edit
+        </button>
+        {person && (
+          <button
+            className="button button-quiet"
+            onClick={() => {
+              setDialogError('')
+              setEditor({ kind: 'toggle', item: person })
+            }}
+          >
+            {person.active ? 'Nonaktifkan' : 'Aktifkan'}
+          </button>
+        )}
+        <button
+          className="button button-danger"
+          aria-label={'Arsipkan ' + item.name}
+          onClick={() => {
+            setDialogError('')
+            setEditor({ kind: 'delete', item })
+          }}
+        >
+          Arsipkan
+        </button>
+      </div>
+    )
   }
 
-  const title = editor?.kind === 'delete' ? 'Hapus ' + label : editor?.kind === 'toggle'
-    ? (editor.item.active ? 'Nonaktifkan Karyawan' : 'Aktifkan Karyawan')
-    : (editor?.existing ? 'Edit ' : 'Tambah ') + label
+  const title =
+    editor?.kind === 'delete'
+      ? 'Arsipkan ' + label
+      : editor?.kind === 'toggle'
+        ? editor.item.active
+          ? 'Nonaktifkan Karyawan'
+          : 'Aktifkan Karyawan'
+        : (editor?.existing ? 'Edit ' : 'Tambah ') + label
 
-  return <>
-    <Header><Link className="button header-link" to="/owner">Rekap Absensi</Link></Header>
-    <main className="dashboard-shell stack">
-      <section className="panel stack">
-        <nav className="manage-actions" aria-label="Menu data Owner">
-          <Link className={'button ' + (isStaff ? 'button-primary' : 'button-secondary')} aria-current={isStaff ? 'page' : undefined} to="/owner/karyawan">Karyawan</Link>
-          <Link className={'button ' + (!isStaff ? 'button-primary' : 'button-secondary')} aria-current={!isStaff ? 'page' : undefined} to="/owner/toko">Toko</Link>
-        </nav>
-        <div className="directory-heading">
-          <h1>Kelola {label}</h1>
-          <button className="button button-primary" disabled={!directory || !online} onClick={() => edit()}>+ Tambah {label}</button>
-        </div>
-        <div className="schedule-controls">
-          <label className="field">Cari {label.toLocaleLowerCase('id')}
-            <input type="search" value={query} placeholder="Cari nama" onChange={event => setQuery(event.target.value)} />
-          </label>
-          {isStaff && <label className="field">Toko
-            <select value={filter} onChange={event => setFilter(event.target.value)}>
-              <option value="">Semua toko</option>
-              <option value="none">Belum ditempatkan</option>
-              {stores.map(store => <option key={store.id} value={store.id}>{store.name}</option>)}
-            </select>
-          </label>}
-        </div>
-        {!online && <Notice tone="warning">Hubungkan internet untuk menyimpan perubahan.</Notice>}
-        {error && <><Notice tone="error">{error}</Notice>
-          <button className="button button-secondary" disabled={!online} onClick={() => setRevision(value => value + 1)}>Coba Lagi</button></>}
-        {message && <Notice tone="success">{message}</Notice>}
-        {!directory && !error && online && <Loading label={'Memuat ' + label.toLocaleLowerCase('id') + '…'} />}
-        {directory && (isStaff ? people.length : shops.length) === 0 && <Notice>Tidak ada data yang cocok.</Notice>}
-        {directory && <ul className="directory-list">
-          {isStaff ? people.map(person => <li key={person.id}>
-            <div><strong>{person.name}</strong><p className="muted">{storeNames.get(person.storeId ?? '') ?? 'Belum ditempatkan'} · {person.active ? 'Aktif' : 'Nonaktif'}</p></div>
-            {actions(person, person)}
-          </li>) : shops.map(store => <li key={store.id}>
-            <div><strong>{store.name}</strong><p className="muted">{counts.get(store.id) ?? 0} karyawan terdaftar</p></div>
-            {actions(store)}
-          </li>)}
-        </ul>}
-      </section>
-    </main>
-    {editor && <Dialog title={title} onClose={() => setEditor(undefined)} busy={busy}>
-      <form className="stack" onSubmit={event => { event.preventDefault(); void save() }}>
-        {dialogError && <Notice tone="error">{dialogError}</Notice>}
-        {editor.kind === 'edit' ? <>
-          <label className="field">Nama {label.toLocaleLowerCase('id')}
-            <input required maxLength={80} value={name} disabled={busy} onChange={event => setName(event.target.value)} />
-          </label>
-          {isStaff && <label className="field">Penempatan toko
-            <select value={storeId} disabled={busy} onChange={event => setStoreId(event.target.value)}>
-              <option value="">Belum ditempatkan</option>
-              {stores.map(store => <option key={store.id} value={store.id}>{store.name}</option>)}
-            </select>
-          </label>}
-        </> : <>
-          <p><strong>{editor.item.name}</strong></p>
-          {editor.kind === 'delete' && <p>Data akan dihapus dari daftar aktif. Riwayat absensi dan jadwal tetap tersedia.</p>}
-          {editor.kind === 'delete' && !isStaff && (counts.get(editor.item.id) ?? 0) > 0 &&
-            <Notice tone="warning">Pindahkan atau hapus semua karyawan dari toko ini terlebih dahulu.</Notice>}
-        </>}
-        <div className="directory-actions">
-          <button type="button" className="button button-secondary" disabled={busy} onClick={() => setEditor(undefined)}>Batal</button>
-          <button type="submit" className={'button ' + (editor.kind === 'delete' ? 'button-danger' : 'button-primary')}
-            disabled={busy || !online || (editor.kind === 'edit' && !name.trim())
-              || (editor.kind === 'delete' && !isStaff && (counts.get(editor.item.id) ?? 0) > 0)}>
-            {busy ? 'Menyimpan…' : editor.kind === 'edit' ? 'Simpan' : title}
-          </button>
-        </div>
-      </form>
-    </Dialog>}
-  </>
+  return (
+    <>
+      <main className="dashboard-shell stack">
+        <section className="panel stack">
+          <div className="directory-heading">
+            <h1>Kelola {label}</h1>
+            <button
+              className="button button-primary"
+              disabled={!directory || !online}
+              onClick={() => edit()}
+            >
+              + Tambah {label}
+            </button>
+          </div>
+          <div className="schedule-controls">
+            <label className="field">
+              Cari {label.toLocaleLowerCase('id')}
+              <input
+                type="search"
+                value={query}
+                placeholder="Cari nama"
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </label>
+            {isStaff && (
+              <label className="field">
+                Toko
+                <select value={filter} onChange={(event) => setFilter(event.target.value)}>
+                  <option value="">Semua toko</option>
+                  <option value="none">Belum ditempatkan</option>
+                  {stores.map((store) => (
+                    <option key={store.id} value={store.id}>
+                      {store.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
+          {!online && <Notice tone="warning">Hubungkan internet untuk menyimpan perubahan.</Notice>}
+          {error && (
+            <>
+              <Notice tone="error">{error}</Notice>
+              <button
+                className="button button-secondary"
+                disabled={!online}
+                onClick={() => setRevision((value) => value + 1)}
+              >
+                Coba Lagi
+              </button>
+            </>
+          )}
+          {message && <Notice tone="success">{message}</Notice>}
+          {!directory && !error && online && (
+            <Loading label={'Memuat ' + label.toLocaleLowerCase('id') + '…'} />
+          )}
+          {directory && (isStaff ? people.length : shops.length) === 0 && (
+            <Notice>Tidak ada data yang cocok.</Notice>
+          )}
+          {directory && (
+            <ul className="directory-list">
+              {isStaff
+                ? people.map((person) => (
+                    <li key={person.id}>
+                      <div>
+                        <strong>{person.name}</strong>
+                        <p className="muted">
+                          {storeNames.get(person.storeId ?? '') ?? 'Belum ditempatkan'} ·{' '}
+                          {person.active ? 'Aktif' : 'Nonaktif'}
+                        </p>
+                      </div>
+                      {actions(person, person)}
+                    </li>
+                  ))
+                : shops.map((store) => (
+                    <li key={store.id}>
+                      <div>
+                        <strong>{store.name}</strong>
+                        <p className="muted">{counts.get(store.id) ?? 0} karyawan terdaftar</p>
+                      </div>
+                      {actions(store)}
+                    </li>
+                  ))}
+            </ul>
+          )}
+        </section>
+      </main>
+      {editor && (
+        <Dialog title={title} onClose={() => setEditor(undefined)} busy={busy}>
+          <form
+            className="stack"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void save()
+            }}
+          >
+            {dialogError && <Notice tone="error">{dialogError}</Notice>}
+            {editor.kind === 'edit' ? (
+              <>
+                <label className="field">
+                  Nama {label.toLocaleLowerCase('id')}
+                  <input
+                    required
+                    maxLength={80}
+                    value={name}
+                    disabled={busy}
+                    onChange={(event) => setName(event.target.value)}
+                  />
+                </label>
+                {isStaff && (
+                  <label className="field">
+                    Penempatan toko
+                    <select
+                      value={storeId}
+                      disabled={busy}
+                      onChange={(event) => setStoreId(event.target.value)}
+                    >
+                      <option value="">Belum ditempatkan</option>
+                      {stores.map((store) => (
+                        <option key={store.id} value={store.id}>
+                          {store.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </>
+            ) : (
+              <>
+                <p>
+                  <strong>{editor.item.name}</strong>
+                </p>
+                {editor.kind === 'delete' && (
+                  <p>
+                    Data akan dihapus dari daftar aktif. Riwayat absensi dan jadwal tetap tersedia.
+                  </p>
+                )}
+                {editor.kind === 'delete' && !isStaff && (counts.get(editor.item.id) ?? 0) > 0 && (
+                  <Notice tone="warning">
+                    Pindahkan atau hapus semua karyawan dari toko ini terlebih dahulu.
+                  </Notice>
+                )}
+              </>
+            )}
+            <div className="directory-actions">
+              <button
+                type="button"
+                className="button button-secondary"
+                disabled={busy}
+                onClick={() => setEditor(undefined)}
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                className={
+                  'button ' + (editor.kind === 'delete' ? 'button-danger' : 'button-primary')
+                }
+                disabled={
+                  busy ||
+                  !online ||
+                  (editor.kind === 'edit' && !name.trim()) ||
+                  (editor.kind === 'delete' && !isStaff && (counts.get(editor.item.id) ?? 0) > 0)
+                }
+              >
+                {busy ? 'Menyimpan…' : editor.kind === 'edit' ? 'Simpan' : title}
+              </button>
+            </div>
+          </form>
+        </Dialog>
+      )}
+    </>
+  )
 }

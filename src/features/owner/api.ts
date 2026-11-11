@@ -3,7 +3,19 @@ import type { Attendance, Employee, Evidence, Store } from '../attendance/types'
 
 const url = import.meta.env.VITE_SUPABASE_URL?.trim()
 const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim()
-export const ownerClient = url && key ? createClient(url, key, { auth: { flowType: 'pkce' } }) : null
+export const ownerClient =
+  url && key
+    ? createClient(url, key, {
+        auth: { flowType: 'pkce' },
+        global: {
+          fetch: (input, init) => {
+            const timeout = AbortSignal.timeout(30_000)
+            const signal = init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout
+            return fetch(input, { ...init, signal })
+          },
+        },
+      })
+    : null
 
 function client() {
   if (!ownerClient) throw new Error('Konfigurasi Supabase belum tersedia.')
@@ -11,8 +23,12 @@ function client() {
 }
 
 export async function isOwner(id: string) {
-  const { data, error } = await client().from('owner_profiles').select('user_id')
-    .eq('user_id', id).eq('role', 'owner').maybeSingle()
+  const { data, error } = await client()
+    .from('owner_profiles')
+    .select('user_id')
+    .eq('user_id', id)
+    .eq('role', 'owner')
+    .maybeSingle()
   if (error) throw new Error('Hak akses Owner belum bisa diperiksa.')
   return Boolean(data)
 }
@@ -33,121 +49,250 @@ export async function requestPasswordReset(email: string) {
     throw new Error('Terlalu banyak permintaan reset. Tunggu sebelum mencoba lagi.')
   }
   if (error?.code === 'email_address_not_authorized') {
-    throw new Error('Layanan email Supabase belum mengizinkan pengiriman ke alamat ini. Hubungi admin proyek.')
+    throw new Error(
+      'Layanan email Supabase belum mengizinkan pengiriman ke alamat ini. Hubungi admin proyek.',
+    )
   }
   if (error) throw new Error('Permintaan reset belum berhasil. Coba lagi.')
 }
 
 export async function updateOwnerPassword(password: string) {
   const { error } = await client().auth.updateUser({ password })
-  if (error) throw new Error('Kata sandi belum bisa diperbarui. Gunakan tautan yang masih berlaku dan kata sandi baru.')
+  if (error)
+    throw new Error(
+      'Kata sandi belum bisa diperbarui. Gunakan tautan yang masih berlaku dan kata sandi baru.',
+    )
 }
 
-type EvidenceRow = { id: string; type: string; latitude: number; longitude: number; accuracy_m: number }
+type EvidenceRow = {
+  id: string
+  type: string
+  latitude: number
+  longitude: number
+  accuracy_m: number
+}
 type AttendanceRow = {
   store_id: string | null
-  employee_id: string; work_date: string; check_in_at: string; check_out_at: string | null
+  employee_id: string
+  work_date: string
+  check_in_at: string
+  check_out_at: string | null
   attendance_evidence: EvidenceRow[]
 }
 
 function readEvidence(at: string, row?: EvidenceRow): Evidence {
   return {
-    at, photo: null, id: row?.id,
-    location: row ? { latitude: row.latitude, longitude: row.longitude, accuracy: row.accuracy_m }
+    at,
+    photo: null,
+    id: row?.id,
+    location: row
+      ? { latitude: row.latitude, longitude: row.longitude, accuracy: row.accuracy_m }
       : undefined,
   }
 }
 
-export async function loadDashboard(date: string, signal: AbortSignal): Promise<{ employees: Employee[]; records: Attendance[]; stores: Store[] }> {
+export async function loadDashboard(
+  date: string,
+  signal: AbortSignal,
+): Promise<{ employees: Employee[]; records: Attendance[]; stores: Store[] }> {
   const [people, attendance, stores] = await Promise.all([
-    client().from('employees').select('id,name,is_active,store_id,archived_at').order('name').abortSignal(signal),
-    client().from('attendance').select('employee_id,store_id,work_date,check_in_at,check_out_at,attendance_evidence(id,type,latitude,longitude,accuracy_m)')
-      .eq('work_date', date).abortSignal(signal),
+    client()
+      .from('employees')
+      .select('id,name,is_active,store_id,archived_at')
+      .order('name')
+      .abortSignal(signal),
+    client()
+      .from('attendance')
+      .select(
+        'employee_id,store_id,work_date,check_in_at,check_out_at,attendance_evidence(id,type,latitude,longitude,accuracy_m)',
+      )
+      .eq('work_date', date)
+      .abortSignal(signal),
     client().from('stores').select('id,name,archived_at').order('name').abortSignal(signal),
   ])
-  if (people.error || attendance.error || stores.error) throw new Error('Rekap belum bisa dimuat. Coba lagi.')
+  if (people.error || attendance.error || stores.error)
+    throw new Error('Rekap belum bisa dimuat. Coba lagi.')
   return {
-    employees: people.data.map(row => ({ id: row.id, name: row.name, active: row.is_active, storeId: row.store_id, archivedAt: row.archived_at })),
-    stores: stores.data.map(row => ({ id: row.id, name: row.name, archivedAt: row.archived_at })),
-    records: (attendance.data as AttendanceRow[]).map(row => ({
-      employeeId: row.employee_id, storeId: row.store_id,
+    employees: people.data.map((row) => ({
+      id: row.id,
+      name: row.name,
+      active: row.is_active,
+      storeId: row.store_id,
+      archivedAt: row.archived_at,
+    })),
+    stores: stores.data.map((row) => ({ id: row.id, name: row.name, archivedAt: row.archived_at })),
+    records: (attendance.data as AttendanceRow[]).map((row) => ({
+      employeeId: row.employee_id,
+      storeId: row.store_id,
       workDate: row.work_date,
-      checkIn: readEvidence(row.check_in_at, row.attendance_evidence.find(item => item.type === 'IN')),
-      checkOut: row.check_out_at ? readEvidence(row.check_out_at, row.attendance_evidence.find(item => item.type === 'OUT')) : undefined,
+      checkIn: readEvidence(
+        row.check_in_at,
+        row.attendance_evidence.find((item) => item.type === 'IN'),
+      ),
+      checkOut: row.check_out_at
+        ? readEvidence(
+            row.check_out_at,
+            row.attendance_evidence.find((item) => item.type === 'OUT'),
+          )
+        : undefined,
     })),
   }
 }
 
-async function invoke<T>(operation: string, id: string, fields = {}, signal?: AbortSignal): Promise<T> {
-  const { data: { session } } = await client().auth.getSession()
+async function invoke<T>(
+  operation: string,
+  id: string,
+  fields = {},
+  signal?: AbortSignal,
+): Promise<T> {
+  const {
+    data: { session },
+  } = await client().auth.getSession()
   if (!session) throw new Error('Sesi berakhir. Silakan masuk kembali.')
   const response = await fetch(new URL('/functions/v1/owner-api', url), {
-    method: 'POST', redirect: 'error', cache: 'no-store',
-    headers: { 'Content-Type': 'application/json', apikey: key!, Authorization: 'Bearer ' + session.access_token },
+    method: 'POST',
+    redirect: 'error',
+    cache: 'no-store',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: key!,
+      Authorization: 'Bearer ' + session.access_token,
+    },
     body: JSON.stringify({ operation, id, ...fields }),
-    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
+    signal: signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(30_000)])
+      : AbortSignal.timeout(30_000),
+  }).catch(() => {
+    if (signal?.aborted) throw new DOMException('Dibatalkan', 'AbortError')
+    throw new Error(
+      operation === 'photo'
+        ? 'Foto belum bisa dimuat. Periksa koneksi dan coba lagi.'
+        : 'Hasil penyimpanan belum diterima. Periksa koneksi, lalu coba Simpan kembali dengan isian yang sama.',
+    )
   })
   const data = await response.json().catch(() => null)
-  if (response.status === 400 && operation.startsWith('archive_') && data?.error === 'Operasi tidak valid.') {
+  if (
+    response.status === 400 &&
+    operation.startsWith('archive_') &&
+    data?.error === 'Operasi tidak valid.'
+  ) {
     throw new Error('Layanan penghapusan belum diperbarui. Hubungi pengelola aplikasi.')
   }
-  if (!response.ok || !data) throw new Error(data?.error ?? 'Layanan Owner belum tersedia.')
+  if (!response.ok || !data)
+    throw new Error(typeof data?.error === 'string' ? data.error : 'Layanan Owner belum tersedia.')
+  if (operation !== 'photo' && data.ok !== true)
+    throw new Error('Perubahan belum dikonfirmasi server. Perbarui daftar sebelum mencoba kembali.')
   return data as T
 }
 
-export const getPrivatePhoto = (id: string, signal: AbortSignal) => invoke<{ url: string }>('photo', id, {}, signal)
-export const createEmployee = (id: string, name: string, storeId: string | null) => invoke('create', id, { name, store_id: storeId })
-export const renameEmployee = (id: string, name: string, storeId: string | null) => invoke('rename', id, { name, store_id: storeId })
-export const setEmployeeActive = (id: string, active: boolean) => invoke(active ? 'activate' : 'deactivate', id)
+const pendingWrites = new Map<string, string>()
+async function write(operation: string, id: string, fields = {}) {
+  const {
+    data: { session },
+  } = await client().auth.getSession()
+  if (!session) throw new Error('Sesi berakhir. Silakan masuk kembali.')
+  const signature = JSON.stringify([session.user.id, operation, id, fields])
+  const requestId = pendingWrites.get(signature) ?? crypto.randomUUID()
+  pendingWrites.set(signature, requestId)
+  const result = await invoke(operation, id, { ...fields, request_id: requestId })
+  pendingWrites.delete(signature)
+  return result
+}
 
-export const saveStore = (id: string, name: string, creating: boolean) => invoke(creating ? 'create_store' : 'rename_store', id, { name })
+export const getPrivatePhoto = (id: string, signal: AbortSignal) =>
+  invoke<{ url: string }>('photo', id, {}, signal)
+export const createEmployee = (id: string, name: string, storeId: string | null) =>
+  write('create', id, { name, store_id: storeId })
+export const renameEmployee = (id: string, name: string, storeId: string | null) =>
+  write('rename', id, { name, store_id: storeId })
+export const setEmployeeActive = (id: string, active: boolean) =>
+  write(active ? 'activate' : 'deactivate', id)
 
+export const saveStore = (id: string, name: string, creating: boolean) =>
+  write(creating ? 'create_store' : 'rename_store', id, { name })
 
-export const archiveEmployee = (id: string) => invoke('archive_employee', id)
-export const archiveStore = (id: string) => invoke('archive_store', id)
+export const archiveEmployee = (id: string) => write('archive_employee', id)
+export const archiveStore = (id: string) => write('archive_store', id)
 
-export async function loadScheduleDirectory() {
+export async function loadScheduleDirectory(signal: AbortSignal = AbortSignal.timeout(30_000)) {
   const [people, stores] = await Promise.all([
-    client().from('employees').select('id,name,is_active,store_id,archived_at').order('name'),
-    client().from('stores').select('id,name,archived_at').order('name'),
+    client()
+      .from('employees')
+      .select('id,name,is_active,store_id,archived_at')
+      .order('name')
+      .abortSignal(signal),
+    client().from('stores').select('id,name,archived_at').order('name').abortSignal(signal),
   ])
   if (people.error || stores.error) throw new Error('Daftar toko dan karyawan belum bisa dimuat.')
   return {
-    employees: people.data.map(row => ({ id: row.id, name: row.name, active: row.is_active, storeId: row.store_id, archivedAt: row.archived_at })),
-    stores: stores.data.map(row => ({ id: row.id, name: row.name, archivedAt: row.archived_at } as Store)),
+    employees: people.data.map((row) => ({
+      id: row.id,
+      name: row.name,
+      active: row.is_active,
+      storeId: row.store_id,
+      archivedAt: row.archived_at,
+    })),
+    stores: stores.data.map(
+      (row) => ({ id: row.id, name: row.name, archivedAt: row.archived_at }) as Store,
+    ),
   }
 }
 
 export type ShiftCell = { employee_id: string; work_date: string; code: 'P' | 'M' | 'S' | 'O' }
 
-export async function loadShifts(store: string, month: string, signal: AbortSignal): Promise<ShiftCell[]> {
+export async function loadShifts(
+  store: string,
+  month: string,
+  signal: AbortSignal,
+): Promise<ShiftCell[]> {
   const [year, number] = month.split('-').map(Number)
   const next = new Date(Date.UTC(year, number, 1)).toISOString().slice(0, 10)
   const result: ShiftCell[] = []
   for (let offset = 0; ; offset += 500) {
-    const { data, error } = await client().from('shift_schedule').select('employee_id,work_date,code')
-      .eq('store_id', store).gte('work_date', month + '-01').lt('work_date', next)
-      .order('work_date').order('employee_id').range(offset, offset + 499).abortSignal(signal)
+    const { data, error } = await client()
+      .from('shift_schedule')
+      .select('employee_id,work_date,code')
+      .eq('store_id', store)
+      .gte('work_date', month + '-01')
+      .lt('work_date', next)
+      .order('work_date')
+      .order('employee_id')
+      .range(offset, offset + 499)
+      .abortSignal(signal)
     if (error) throw new Error('Jadwal belum bisa dimuat.')
-    result.push(...data as ShiftCell[])
+    result.push(...(data as ShiftCell[]))
     if (data.length < 500) return result
   }
 }
 
 export async function importShifts(store: string, month: string, cells: ShiftCell[]) {
-  const { data, error } = await client().rpc('owner_import_shifts', { p_store: store, p_month: month + '-01', p_cells: cells })
-  if (error) throw new Error('Jadwal gagal disimpan. Periksa penempatan karyawan dan bulan yang dipilih.')
+  const { data, error } = await client().rpc('owner_import_shifts', {
+    p_store: store,
+    p_month: month + '-01',
+    p_cells: cells,
+  })
+  if (error)
+    throw new Error('Jadwal gagal disimpan. Periksa penempatan karyawan dan bulan yang dipilih.')
   return data as number
 }
 
 export async function saveBrand(name: string) {
-  const { data, error } = await client().from('app_brand').update({ name }).eq('singleton', true).select('name').single()
+  const { data, error } = await client()
+    .from('app_brand')
+    .update({ name })
+    .eq('singleton', true)
+    .select('name')
+    .single()
   if (error) throw new Error('Nama aplikasi gagal disimpan.')
   return data.name as string
 }
 
 export async function loadBrand() {
-  const { data, error } = await client().from('app_brand').select('name').eq('singleton', true).single()
+  const { data, error } = await client()
+    .from('app_brand')
+    .select('name')
+    .eq('singleton', true)
+    .single()
   if (error) throw new Error('Pengaturan nama aplikasi gagal dimuat.')
   return data.name as string
 }

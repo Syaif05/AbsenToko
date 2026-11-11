@@ -134,3 +134,20 @@ Uji konfigurasi menggunakan [SQL aktivasi dan jadwal](tests/idaman_schedule_and_
 4. Di dashboard Owner, buka **Kelola Toko** atau **Kelola Karyawan**. Hapus mengarsipkan data dan mempertahankan jadwal serta riwayat absensi. Pindahkan atau hapus karyawan yang masih terdaftar sebelum menghapus tokonya.
 
 Pemilihan nama tidak memverifikasi identitas. Foto dan lokasi tetap menjadi bukti absensi.
+
+## Pembaruan Owner November 2026
+
+Area Owner memakai navigasi bersama, filter riwayat toko, dan ID permintaan untuk penyimpanan ulang. Login, foto privat, jadwal Excel, serta pengaturan tetap memakai autentikasi dan RLS Supabase.
+
+Urutan pemasangan setelah pengujian staging dan persetujuan produksi
+
+1. Terapkan `20261111140941_owner_reliability.sql` pada skema yang telah memiliki migrasi absensi langsung. Migrasi menambah tabel tanda terima transaksi privat dan RPC `owner_apply_change`. Riwayat migrasi produksi sebelumnya kosong, sehingga periksa skema awal sebelum memakai perintah push seluruh migrasi.
+2. Jalankan `supabase/tests/owner_reliability.sql` di staging. Pengujian membatalkan fixture melalui rollback dan memeriksa replay, konflik payload, kegagalan atomik, serta izin.
+3. Pasang ulang `owner-api`, kemudian frontend. Function baru kompatibel dengan klien lama melalui ID permintaan yang dibuat server. Jaminan retry dengan ID sama memerlukan frontend baru.
+4. Uji memakai akun Owner staging, termasuk login, tambah/edit/arsip, unggah jadwal, dan detail foto. Hasil browser dengan respons simulasi hanya memverifikasi UI dan kontrak respons.
+
+`attendance_private.owner_change_requests` menyimpan ID Owner, target, operasi, hash payload, dan waktu commit. Akses hanya melalui fungsi server. Tanda terima dipertahankan agar pengiriman ulang tetap dikenali. Kebijakan retensinya memerlukan keputusan Owner sebelum cleanup diaktifkan.
+
+Jika rollback aplikasi diperlukan, gunakan kembali frontend dan `owner-api` versi sebelumnya. Tabel dan RPC tambahan dapat tetap ada. Kehadiran karyawan menggunakan API yang sama seperti sebelum pembaruan.
+
+Uji lokal dengan `npm test`, `npm run lint`, dan `npm run build`. Periksa fungsi dengan `deno task --config supabase/deno.json check`.
