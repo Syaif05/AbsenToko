@@ -86,11 +86,20 @@ Deno.serve(async request => {
     }
     if (body.operation === 'list') {
       if (!uuid(body.store_id)) throw new Failure(400, 'Pilih toko yang valid.')
-      const { data, error } = await client.from('employees').select('id,name,stores!inner(id)')
-        .eq('store_id', body.store_id).eq('is_active', true).is('archived_at', null).is('stores.archived_at', null)
-        .order('name')
-      if (error) throw new Failure(503, 'Daftar karyawan belum bisa dimuat.')
-      return respond({ employees: data.map(({ id, name }) => ({ id, name })) })
+      const { data: store, error: storeError } = await client.from('stores').select('id')
+        .eq('id', body.store_id).is('archived_at', null).maybeSingle()
+      if (storeError) {
+        console.error('Attendance store lookup failed', storeError.code)
+        throw new Failure(503, 'Daftar karyawan belum bisa dimuat.')
+      }
+      if (!store) return respond({ employees: [] })
+      const { data, error } = await client.from('employees').select('id,name')
+        .eq('store_id', store.id).eq('is_active', true).is('archived_at', null).order('name')
+      if (error) {
+        console.error('Attendance employee list failed', error.code)
+        throw new Failure(503, 'Daftar karyawan belum bisa dimuat.')
+      }
+      return respond({ employees: data })
     }
     if (body.operation === 'select_employee') {
       if (!uuid(body.store_id) || !uuid(body.employee_id)) throw new Failure(400, 'Pilih toko dan nama yang valid.')

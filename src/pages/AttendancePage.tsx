@@ -21,6 +21,7 @@ export default function AttendancePage() {
   const [stores, setStores] = useState<Store[]>()
   const [storeId, setStoreId] = useState('')
   const [staff, setStaff] = useState<Employee[]>()
+  const [staffError, setStaffError] = useState('')
   const [directoryError, setDirectoryError] = useState('')
   const [directoryRetry, setDirectoryRetry] = useState(0)
   const [employeeId, setEmployeeId] = useState('')
@@ -58,9 +59,9 @@ export default function AttendancePage() {
     if (account || !storeId || !online) return
     let current = true
     void attendanceEmployees(storeId).then(data => {
-      if (current) setStaff(data)
+      if (current) { setStaff(data); setStaffError('') }
     }, error => {
-      if (current) setDirectoryError(errorMessage(error, 'Daftar karyawan belum bisa dimuat.'))
+      if (current) setStaffError(errorMessage(error, 'Daftar karyawan belum bisa dimuat.'))
     })
     return () => { current = false }
   }, [account, storeId, online, directoryRetry])
@@ -255,13 +256,20 @@ export default function AttendancePage() {
                       setStoreId(event.target.value)
                       setEmployeeId('')
                       setStaff(undefined)
+                      setStaffError('')
                       setError('')
                     }}>
                       <option value="">Pilih toko Anda</option>
                       {stores.map(store => <option key={store.id} value={store.id}>{store.name}</option>)}
                     </select>
                   </label>
-                  {storeId && (staff ? staff.length
+                  {storeId && (staffError ? <>
+                    <Notice tone="error">{staffError}</Notice>
+                    <button type="button" className="button button-secondary" disabled={!online} onClick={() => {
+                      setStaffError('')
+                      setDirectoryRetry(value => value + 1)
+                    }}>Coba Muat Karyawan Lagi</button>
+                  </> : staff ? staff.length
                     ? <EmployeeSelector employees={staff} value={employeeId} onChange={setEmployeeId} disabled={verifying || !online} />
                     : <Notice>Belum ada karyawan aktif di toko ini.</Notice>
                     : <Loading label="Memuat karyawan…" />)}
@@ -269,7 +277,7 @@ export default function AttendancePage() {
                     <input type="checkbox" checked={remember} onChange={event => setRemember(event.target.checked)} disabled={verifying} />
                     <span>Ingat saya di perangkat ini</span>
                   </label>}
-                  <button className="button button-primary w-full" disabled={!online || verifying || !staff?.some(person => person.id === employeeId)}>
+                  <button className="button button-primary w-full" disabled={!online || verifying || !!staffError || !staff?.some(person => person.id === employeeId)}>
                     {verifying ? 'Membuka absensi…' : 'Lanjutkan Absen'}
                   </button>
                 </form>}

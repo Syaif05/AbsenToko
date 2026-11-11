@@ -88,6 +88,9 @@ async function invoke<T>(operation: string, id: string, fields = {}, signal?: Ab
     signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
   })
   const data = await response.json().catch(() => null)
+  if (response.status === 400 && operation.startsWith('archive_') && data?.error === 'Operasi tidak valid.') {
+    throw new Error('Layanan penghapusan belum diperbarui. Hubungi pengelola aplikasi.')
+  }
   if (!response.ok || !data) throw new Error(data?.error ?? 'Layanan Owner belum tersedia.')
   return data as T
 }
