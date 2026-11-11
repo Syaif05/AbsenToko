@@ -105,6 +105,7 @@ Deno.serve(async (request) => {
         'deactivate',
         'archive_employee',
         'archive_store',
+        'delete_store',
         'create_store',
         'rename_store',
       ].includes(operation)

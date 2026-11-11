@@ -212,7 +212,7 @@ export const saveStore = (id: string, name: string, creating: boolean) =>
   write(creating ? 'create_store' : 'rename_store', id, { name })
 
 export const archiveEmployee = (id: string) => write('archive_employee', id)
-export const archiveStore = (id: string) => write('archive_store', id)
+export const deleteStore = (id: string) => write('delete_store', id)
 
 export async function loadScheduleDirectory(signal: AbortSignal = AbortSignal.timeout(30_000)) {
   const [people, stores] = await Promise.all([
@@ -263,6 +263,21 @@ export async function loadShifts(
     result.push(...(data as ShiftCell[]))
     if (data.length < 500) return result
   }
+}
+
+export async function setShift(
+  store: string,
+  employee: string,
+  date: string,
+  code: ShiftCell['code'] | null,
+) {
+  const { error } = await client().rpc('owner_set_shift', {
+    p_store: store,
+    p_employee: employee,
+    p_date: date,
+    p_code: code,
+  })
+  if (error) throw new Error('Shift belum bisa disimpan. Periksa koneksi dan penempatan karyawan.')
 }
 
 export async function importShifts(store: string, month: string, cells: ShiftCell[]) {

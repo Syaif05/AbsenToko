@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
+import { Dialog } from '../components/ui/Dialog'
 import { TransferIcon } from '../components/ui/TransferIcon'
 import { Loading, Notice, errorMessage } from '../components/ui/shared'
 import { todayWib } from '../features/attendance/dates'
-import { importShifts, loadScheduleDirectory, loadShifts } from '../features/owner/api'
+import { importShifts, loadScheduleDirectory, loadShifts, setShift } from '../features/owner/api'
 import type { ShiftCell } from '../features/owner/api'
 import {
   downloadSchedule,
@@ -15,6 +16,13 @@ import {
 export default function OwnerSchedulePage() {
   const uploadInput = useRef<HTMLInputElement>(null)
   const [directory, setDirectory] = useState<Awaited<ReturnType<typeof loadScheduleDirectory>>>()
+  const [editing, setEditing] = useState<{
+    employee: string
+    name: string
+    date: string
+    code: ShiftCell['code'] | ''
+  }>()
+  const [editError, setEditError] = useState('')
   const [storeId, setStoreId] = useState('')
   const [month, setMonth] = useState(() => todayWib().slice(0, 7))
   const [snapshot, setSnapshot] = useState<{ scope: string; cells: ShiftCell[] }>()
@@ -24,16 +32,21 @@ export default function OwnerSchedulePage() {
   const [message, setMessage] = useState('')
   const [failedScope, setFailedScope] = useState('')
   const [retry, setRetry] = useState(0)
-  const store = directory?.stores.find((item) => item.id === storeId)
+  const stores = directory?.stores.filter((item) => !item.archivedAt) ?? []
+  const store = stores.find((item) => item.id === storeId)
   const scope = storeId + ':' + month
   const current = snapshot?.scope === scope
   const cells = current ? snapshot.cells : []
   const employees =
-    directory?.employees.filter((person) => person.active && person.storeId === storeId) ?? []
+    directory?.employees.filter(
+      (person) => person.active && !person.archivedAt && person.storeId === storeId,
+    ) ?? []
   const historical = new Set(cells.map((cell) => cell.employee_id))
   const shown =
     directory?.employees.filter(
-      (person) => (person.active && person.storeId === storeId) || historical.has(person.id),
+      (person) =>
+        (person.active && !person.archivedAt && person.storeId === storeId) ||
+        historical.has(person.id),
     ) ?? []
   const days = validMonth(month) ? monthDays(month) : []
   const preview = new Map(
@@ -46,12 +59,11 @@ export default function OwnerSchedulePage() {
       (data) => {
         if (!active) return
         setDirectory(data)
-        setStoreId(
-          (previous) =>
-            previous ||
-            data.stores.find((store) => !store.archivedAt)?.id ||
-            data.stores[0]?.id ||
-            '',
+        const activeStores = data.stores.filter((store) => !store.archivedAt)
+        setStoreId((previous) =>
+          activeStores.some((store) => store.id === previous)
+            ? previous
+            : (activeStores[0]?.id ?? ''),
         )
       },
       (error) => {
@@ -105,6 +117,26 @@ export default function OwnerSchedulePage() {
     setFailedScope('')
   }
 
+  async function saveShift() {
+    if (!editing || !store || busy || !current) return
+    setBusy(true)
+    setEditError('')
+    setMessage('')
+    try {
+      const { employee, date, code } = editing
+      await setShift(store.id, employee, date, code || null)
+      const next = cells.filter((cell) => cell.employee_id !== employee || cell.work_date !== date)
+      if (code) next.push({ employee_id: employee, work_date: date, code })
+      setSnapshot({ scope, cells: next })
+      setEditing(undefined)
+      setMessage(code ? 'Shift disimpan.' : 'Shift dikosongkan.')
+    } catch (error) {
+      setEditError(errorMessage(error, 'Shift gagal disimpan.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <>
       <main className="dashboard-shell stack">
@@ -121,11 +153,10 @@ export default function OwnerSchedulePage() {
                   setStoreId(event.target.value)
                 }}
               >
-                {!directory?.stores.length && <option value="">Belum ada toko</option>}
-                {directory?.stores.map((item) => (
+                {!stores.length && <option value="">Belum ada toko</option>}
+                {stores.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.name}
-                    {item.archivedAt ? ' (arsip)' : ''}
                   </option>
                 ))}
               </select>
@@ -180,8 +211,8 @@ export default function OwnerSchedulePage() {
             />
           </div>
           <p className="muted">
-            Lihat tab Contoh Pengisian, lalu isi tab Jadwal di Excel atau Google Sheets. Unggah file
-            .xlsx untuk melihat pratinjau.
+            Klik sel pada kalender untuk mengubah shift. Untuk mengisi sekaligus, isi template Excel
+            lalu unggah untuk melihat pratinjau.
           </p>
           {error && (
             <>
@@ -270,12 +301,39 @@ export default function OwnerSchedulePage() {
                     <tr key={person.id}>
                       <th scope="row">{person.name}</th>
                       {days.map((day) => {
-                        const code = preview.get(
-                          person.id + ':' + month + '-' + String(day).padStart(2, '0'),
-                        )
+                        const date = month + '-' + String(day).padStart(2, '0')
+                        const code = preview.get(person.id + ':' + date)
+                        const editable =
+                          person.active && !person.archivedAt && person.storeId === storeId
                         return (
                           <td key={day} data-shift={code} title={code && shifts[code]}>
-                            {code ?? '—'}
+                            {editable ? (
+                              <button
+                                className="schedule-cell-button"
+                                type="button"
+                                disabled={busy || pending.length > 0}
+                                aria-label={
+                                  person.name +
+                                  ', ' +
+                                  date +
+                                  ', ' +
+                                  (code ? shifts[code] : 'Belum dijadwalkan')
+                                }
+                                onClick={() => {
+                                  setEditError('')
+                                  setEditing({
+                                    employee: person.id,
+                                    name: person.name,
+                                    date,
+                                    code: code ?? '',
+                                  })
+                                }}
+                              >
+                                {code ?? '—'}
+                              </button>
+                            ) : (
+                              (code ?? '—')
+                            )}
                           </td>
                         )
                       })}
@@ -308,6 +366,42 @@ export default function OwnerSchedulePage() {
           )}
         </section>
       </main>
+      {editing && (
+        <Dialog title="Ubah shift" onClose={() => setEditing(undefined)} busy={busy}>
+          <form
+            className="stack"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void saveShift()
+            }}
+          >
+            <p>
+              {editing.name} · {editing.date}
+            </p>
+            <label className="field">
+              Shift
+              <select
+                disabled={busy}
+                value={editing.code}
+                onChange={(event) => {
+                  setEditing({ ...editing, code: event.target.value as typeof editing.code })
+                }}
+              >
+                <option value="">Kosongkan jadwal</option>
+                {Object.entries(shifts).map(([code, label]) => (
+                  <option key={code} value={code}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {editError && <Notice tone="error">{editError}</Notice>}
+            <button className="button button-primary" disabled={busy}>
+              {busy ? 'Menyimpan…' : 'Simpan Shift'}
+            </button>
+          </form>
+        </Dialog>
+      )}
     </>
   )
 }

@@ -783,3 +783,18 @@
     padding: 22px;
   }
 }
+
+.schedule-cell-button {
+  display: block;
+  min-width: 44px;
+  min-height: 44px;
+  margin: -0.45rem auto;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.schedule-cell-button:hover:not(:disabled) {
+  background: rgb(0 0 0 / 8%);
+}
+.schedule-cell-button:disabled {
+  cursor: default;
+}

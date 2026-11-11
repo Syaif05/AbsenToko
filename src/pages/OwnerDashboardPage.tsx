@@ -116,12 +116,13 @@ export default function OwnerDashboardPage() {
           >
             <option value="">Semua toko</option>
             <option value="unassigned">Toko historis belum tercatat</option>
-            {snapshot?.data.stores.map((item) => (
-              <option value={item.id} key={item.id}>
-                {item.name}
-                {item.archivedAt ? ' (arsip)' : ''}
-              </option>
-            ))}
+            {snapshot?.data.stores
+              .filter((item) => !item.archivedAt)
+              .map((item) => (
+                <option value={item.id} key={item.id}>
+                  {item.name}
+                </option>
+              ))}
           </select>
         </label>
         <span className="owner-updated">

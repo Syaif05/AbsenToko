@@ -151,3 +151,11 @@ Urutan pemasangan setelah pengujian staging dan persetujuan produksi
 Jika rollback aplikasi diperlukan, gunakan kembali frontend dan `owner-api` versi sebelumnya. Tabel dan RPC tambahan dapat tetap ada. Kehadiran karyawan menggunakan API yang sama seperti sebelum pembaruan.
 
 Uji lokal dengan `npm test`, `npm run lint`, dan `npm run build`. Periksa fungsi dengan `deno task --config supabase/deno.json check`.
+
+## Edit jadwal dan hapus toko permanen
+
+Migrasi `20261111144817_owner_schedule_and_store_deletion.sql` menambah penyimpanan satu shift dan memperbarui proses penghapusan toko. Terapkan migrasi, lalu deploy `owner-api` dan frontend.
+
+Klik sel jadwal untuk memilih P, M, S, O, atau mengosongkannya. Template Excel memakai satu tab Jadwal dengan ID karyawan tersembunyi. Template lama untuk toko dan bulan yang sama tetap dapat diimpor. Sel kosong dalam file mempertahankan shift yang sudah tersimpan.
+
+Pindahkan atau arsipkan karyawan yang masih terdaftar sebelum menghapus tokonya. Penghapusan toko juga menghapus jadwal toko tersebut. Absensi dan bukti tetap tersedia di rekap semua toko dengan toko historis belum tercatat.

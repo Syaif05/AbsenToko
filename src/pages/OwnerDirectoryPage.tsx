@@ -5,7 +5,7 @@ import { useOnline } from '../features/attendance/browser'
 import type { Employee, Store } from '../features/attendance/types'
 import {
   archiveEmployee,
-  archiveStore,
+  deleteStore,
   createEmployee,
   loadScheduleDirectory,
   renameEmployee,
@@ -83,8 +83,8 @@ export default function OwnerDirectoryPage({ mode }: { mode: 'employees' | 'stor
     setMessage('')
     try {
       if (editor.kind === 'delete') {
-        await (isStaff ? archiveEmployee(editor.item.id) : archiveStore(editor.item.id))
-        setMessage(label + ' dihapus dari daftar.')
+        await (isStaff ? archiveEmployee(editor.item.id) : deleteStore(editor.item.id))
+        setMessage(isStaff ? 'Karyawan diarsipkan.' : 'Toko dihapus permanen.')
       } else if (editor.kind === 'toggle') {
         await setEmployeeActive(editor.item.id, !editor.item.active)
         setMessage('Status karyawan diperbarui.')
@@ -124,13 +124,13 @@ export default function OwnerDirectoryPage({ mode }: { mode: 'employees' | 'stor
         )}
         <button
           className="button button-danger"
-          aria-label={'Arsipkan ' + item.name}
+          aria-label={(isStaff ? 'Arsipkan ' : 'Hapus ') + item.name}
           onClick={() => {
             setDialogError('')
             setEditor({ kind: 'delete', item })
           }}
         >
-          Arsipkan
+          {isStaff ? 'Arsipkan' : 'Hapus'}
         </button>
       </div>
     )
@@ -138,7 +138,7 @@ export default function OwnerDirectoryPage({ mode }: { mode: 'employees' | 'stor
 
   const title =
     editor?.kind === 'delete'
-      ? 'Arsipkan ' + label
+      ? (isStaff ? 'Arsipkan ' : 'Hapus Permanen ') + label
       : editor?.kind === 'toggle'
         ? editor.item.active
           ? 'Nonaktifkan Karyawan'
@@ -279,7 +279,9 @@ export default function OwnerDirectoryPage({ mode }: { mode: 'employees' | 'stor
                 </p>
                 {editor.kind === 'delete' && (
                   <p>
-                    Data akan dihapus dari daftar aktif. Riwayat absensi dan jadwal tetap tersedia.
+                    {isStaff
+                      ? 'Karyawan diarsipkan. Riwayat absensi dan jadwal tetap tersedia.'
+                      : 'Toko dan jadwalnya akan dihapus permanen. Catatan absensi dan buktinya tetap tersedia di rekap semua toko.'}
                   </p>
                 )}
                 {editor.kind === 'delete' && !isStaff && (counts.get(editor.item.id) ?? 0) > 0 && (
