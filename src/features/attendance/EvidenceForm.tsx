@@ -98,6 +98,7 @@ export function EvidenceForm({ session, action, headingRef, onBack, onSuccess }:
   return (
     <section className="panel stack" aria-label={actionLabels[action]}>
       <div className="capture-intro">
+        <p className="panel-kicker">Bukti kehadiran</p>
         <div className="capture-heading">
           <h2 ref={headingRef} tabIndex={-1}>{actionLabels[action]}</h2>
           <button className="button button-quiet" type="button" disabled={sending} onClick={onBack}>Kembali</button>

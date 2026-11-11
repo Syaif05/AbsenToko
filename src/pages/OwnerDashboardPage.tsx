@@ -1,12 +1,20 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { Header, Notice, errorMessage } from '../components/ui/shared'
+import { TeaHero } from '../components/ui/TeaHero'
 import { useOnline } from '../features/attendance/browser'
 import { displayDate, displayTime, todayWib } from '../features/attendance/dates'
 import type { Attendance, Employee } from '../features/attendance/types'
 import { loadDashboard } from '../features/owner/api'
 import { AttendanceDetail } from '../features/owner/AttendanceDetail'
 import { EmployeeManager } from '../features/owner/EmployeeManager'
+
+const statIcons = {
+  total: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m20 0v-2a4 4 0 0 0-3-4M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0Zm5-4a4 4 0 0 1 0 8',
+  in: 'M12 5H5v14h7m-2-7h11m-4-4 4 4-4 4',
+  waiting: 'M12 7v5l3 2m6-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
+  out: 'm8 12 3 3 5-6m5 3a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
+}
 
 function initials(name: string) {
   return name.split(/\s+/).slice(0, 2).map((word) => Array.from(word)[0]).join('').toLocaleUpperCase('id')
@@ -94,25 +102,27 @@ export default function OwnerDashboardPage({ onLogout }: { onLogout: () => Promi
     <>
       <Header><button className="button header-link" type="button" disabled={leaving} onClick={logout}>{leaving ? "Keluar…" : "Keluar"}</button></Header>
       <main className="dashboard-shell">
-        <div className="dashboard-intro">
-          <div className="page-intro">
-            <p className="date-label"><span aria-hidden="true" />{displayDate(date)} · WIB</p>
-            <h1>Dashboard</h1>
-            <p className="muted">Rekap absensi karyawan</p>
-          </div>
-          <button className="button button-primary" type="button" disabled={!snapshot || !online} onClick={() => setManaging(true)}>Kelola Karyawan</button>
-        </div>
+        <TeaHero variant="dashboard">
+          <p className="tea-eyebrow"><span aria-hidden="true" />Ruang Owner</p>
+          <h1>Dashboard</h1>
+          <p className="tea-date">{displayDate(date)} · WIB</p>
+          <button className="button hero-action" type="button" disabled={!snapshot || !online} onClick={() => setManaging(true)}>Kelola Karyawan</button>
+        </TeaHero>
         <section className="stats" aria-label="Ringkasan absensi karyawan aktif">
           {stats.map(([label, value, tone]) => (
-            <article className="stat" key={label}>
-              <span className={'stat-accent stat-' + tone} aria-hidden="true" />
+            <article className={'stat stat-' + tone} key={label}>
+              <span className="stat-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                  <path d={statIcons[tone]} />
+                </svg>
+              </span>
               <h2>{label}</h2><strong>{hasData ? value : "—"}</strong>
             </article>
           ))}
         </section>
         <section className="panel dashboard-panel" aria-labelledby="attendance-heading">
           <div className="list-toolbar">
-            <div><h2 id="attendance-heading">Daftar absensi</h2><p className="muted">Pilih karyawan untuk melihat detail.</p></div>
+            <div><p className="panel-kicker">Rekap harian</p><h2 id="attendance-heading">Daftar absensi</h2><p className="muted">Pilih karyawan untuk melihat detail.</p></div>
             <div className="list-actions">
               <label className="field"><span>Tanggal absensi</span>
                 <input type="date" value={date} max={todayWib()} onChange={(event) => {

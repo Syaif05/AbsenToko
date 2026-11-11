@@ -4,6 +4,7 @@ import { Link } from 'react-router'
 import { AttendanceStatus } from '../components/AttendanceStatus'
 import { EmployeeSelector } from '../components/EmployeeSelector'
 import { Header, Loading, Notice, errorMessage } from '../components/ui/shared'
+import { TeaHero } from '../components/ui/TeaHero'
 import { EvidenceForm } from '../features/attendance/EvidenceForm'
 import { useOnline } from '../features/attendance/browser'
 import { displayDate, displayTime, todayWib } from '../features/attendance/dates'
@@ -187,85 +188,95 @@ export default function AttendancePage() {
   return (
     <>
       <Header><Link className="button header-link" to="/owner/login">Masuk Owner</Link></Header>
-      <main className="narrow-shell">
-        <div className="page-intro">
-          <p className="date-label"><span aria-hidden="true" />{displayDate(todayWib())} · WIB</p>
+      <main className={'tea-shell' + (stage === 'capture' ? ' tea-shell-capture' : '')}>
+        <TeaHero>
+          <p className="tea-eyebrow"><span aria-hidden="true" />Tim Kedai</p>
           <h1 ref={pageHeading} tabIndex={-1}>Absensi karyawan</h1>
-          {stage === 'selection' && <p className="muted">Pilih nama dan masukkan PIN untuk mulai.</p>}
-        </div>
-        {!online && <Notice tone="warning">Koneksi internet diperlukan untuk mengirim absensi.</Notice>}
-        {action && session ? (
-          <EvidenceForm session={session} action={action} headingRef={formHeading} onBack={() => { setStatus(null); setAction(null) }} onSuccess={confirm} />
-        ) : confirmation ? (
-          <section className="panel stack success-panel">
-            <div className="success-mark" aria-hidden="true">✓</div>
-            <h2 ref={formHeading} tabIndex={-1}>{demoMode ? 'Absensi demo berhasil' : 'Absensi berhasil'}</h2>
-            <p>{confirmation.employee.name} · {actionLabels[confirmation.action]}</p>
-            <p className="confirmation-time">{displayTime(confirmation.at)} <small>WIB</small></p>
-            <button className="button button-primary w-full" type="button" onClick={() => setConfirmation(null)}>Kembali ke Akun</button>
-          </section>
-        ) : account ? (
-          <section className="panel stack">
-            <h2 ref={formHeading} tabIndex={-1}>{account.employee.name}</h2>
-            <p className="muted">Akun karyawan{expiry ? ' · Sesi berlaku sampai ' + (todayWib(expiry) === todayWib() ? '' : 'besok, ') + displayTime(expiry.toISOString()) + ' WIB' : ''}</p>
-            {accountNotice && <Notice>{accountNotice}</Notice>}
-            {accountError && <Notice tone="error">{accountError}</Notice>}
-            {status ? <AttendanceStatus status={status} /> : online && !accountError && <Loading label="Memuat status absensi…" />}
-            {nextAction && (
-              <button className="button button-primary w-full" type="button" disabled={!online || busy} onClick={startAttendance}>
-                {actionLabels[nextAction]}
-              </button>
-            )}
-            <button className="button button-secondary w-full" type="button" disabled={!online || busy}
-              onClick={() => setStatusReload(value => value + 1)}>Perbarui Status</button>
-            <button className="button button-quiet w-full" type="button" disabled={!online || busy} onClick={logout}>Keluar Akun</button>
-          </section>
-        ) : (
-          <section className="panel stack" aria-label="Verifikasi identitas">
-            {list.kind === 'loading' && <Loading label="Memuat daftar karyawan…" />}
-            {list.kind === 'error' && (
-              <>
-                <Notice tone="error">{list.message}</Notice>
-                <button className="button button-secondary w-full" type="button" disabled={!online} onClick={() => {
-                  setList({ kind: 'loading' })
-                  setReload((value) => value + 1)
-                }}>Coba Lagi</button>
-              </>
-            )}
-            {list.kind === 'ready' && (list.employees.length ? (
-              <form className="stack" onSubmit={verify}>
-                <EmployeeSelector employees={list.employees} value={employeeId} onChange={(value) => {
-                  setEmployeeId(value)
-                  setPin('')
-                  setError('')
-                }} disabled={verifying} />
-                <div className="pin-field">
-                  <label className="field" htmlFor="employee-pin">PIN karyawan</label>
-                  <div className="input-with-action">
-                    <input id="employee-pin" type={visible ? 'text' : 'password'} inputMode="numeric" autoComplete="off"
-                      placeholder="Masukkan PIN" required pattern="[0-9]{6,12}" maxLength={12} value={pin} disabled={verifying}
-                      onChange={(event) => { setPin(event.target.value.replace(/[^0-9]/g, '')); setError('') }} />
-                    <button type="button" className="button button-quiet" aria-controls="employee-pin" disabled={verifying} onClick={() => setVisible((value) => !value)}>
-                      {visible ? 'Sembunyikan' : 'Tampilkan'}
-                    </button>
-                  </div>
-                </div>
-                {!demoMode && <label className="remember-account">
-                  <input type="checkbox" checked={remember} disabled={verifying} onChange={event => setRemember(event.target.checked)} />
-                  <span>Tetap masuk di perangkat ini <small>Hilangkan centang jika perangkat dipakai bersama.</small></span>
-                </label>}
-                {error && <Notice tone="error">{error}</Notice>}
-                <button className="button button-primary w-full" type="submit" disabled={verifying || !online}>
-                  {verifying ? 'Memeriksa PIN…' : 'Lanjutkan'}
+          <p className="tea-date">{displayDate(todayWib())} · WIB</p>
+        </TeaHero>
+        <div className="tea-workspace">
+          {!online && <Notice tone="warning">Koneksi internet diperlukan untuk mengirim absensi.</Notice>}
+          {action && session ? (
+            <EvidenceForm session={session} action={action} headingRef={formHeading} onBack={() => { setStatus(null); setAction(null) }} onSuccess={confirm} />
+          ) : confirmation ? (
+            <section className="panel stack success-panel">
+              <div className="success-mark" aria-hidden="true">✓</div>
+              <h2 ref={formHeading} tabIndex={-1}>{demoMode ? 'Absensi demo berhasil' : 'Absensi berhasil'}</h2>
+              <p>{confirmation.employee.name} · {actionLabels[confirmation.action]}</p>
+              <p className="confirmation-time">{displayTime(confirmation.at)} <small>WIB</small></p>
+              <button className="button button-primary w-full" type="button" onClick={() => setConfirmation(null)}>Kembali ke Akun</button>
+            </section>
+          ) : account ? (
+            <section className="panel stack account-panel">
+              <div className="account-heading">
+                <span className="avatar" aria-hidden="true">{Array.from(account.employee.name)[0]?.toLocaleUpperCase('id')}</span>
+                <div><p className="panel-kicker">Akun karyawan</p><h2 ref={formHeading} tabIndex={-1}>{account.employee.name}</h2></div>
+              </div>
+              <p className="muted">{expiry ? 'Sesi berlaku sampai ' + (todayWib(expiry) === todayWib() ? '' : 'besok, ') + displayTime(expiry.toISOString()) + ' WIB' : ''}</p>
+              {accountNotice && <Notice>{accountNotice}</Notice>}
+              {accountError && <Notice tone="error">{accountError}</Notice>}
+              {status ? <AttendanceStatus status={status} /> : online && !accountError && <Loading label="Memuat status absensi…" />}
+              {nextAction && (
+                <button className="button button-primary w-full" type="button" disabled={!online || busy} onClick={startAttendance}>
+                  {actionLabels[nextAction]}
                 </button>
-              </form>
-            ) : <Notice>Belum ada karyawan aktif. Hubungi Owner.</Notice>)}
-          </section>
-        )}
-        {demoMode && <footer className="demo-footer">
-          <span className="demo-indicator" aria-hidden="true" />
-          {stage === 'selection' ? 'Mode demo · PIN contoh ' + demoPin : 'Mode demo · Data sementara'}
-        </footer>}
+              )}
+              <button className="button button-secondary w-full" type="button" disabled={!online || busy}
+                onClick={() => setStatusReload(value => value + 1)}>Perbarui Status</button>
+              <button className="button button-quiet w-full" type="button" disabled={!online || busy} onClick={logout}>Keluar Akun</button>
+            </section>
+          ) : (
+            <section className="panel stack" aria-labelledby="employee-login-title">
+              <div className="panel-intro">
+                <p className="panel-kicker">Portal karyawan</p>
+                <h2 id="employee-login-title">Hai, tim!</h2>
+                <p className="muted">Pilih nama dan masukkan PIN untuk mulai absen.</p>
+              </div>
+              {list.kind === 'loading' && <Loading label="Memuat daftar karyawan…" />}
+              {list.kind === 'error' && (
+                <>
+                  <Notice tone="error">{list.message}</Notice>
+                  <button className="button button-secondary w-full" type="button" disabled={!online} onClick={() => {
+                    setList({ kind: 'loading' })
+                    setReload((value) => value + 1)
+                  }}>Coba Lagi</button>
+                </>
+              )}
+              {list.kind === 'ready' && (list.employees.length ? (
+                <form className="stack" onSubmit={verify}>
+                  <EmployeeSelector employees={list.employees} value={employeeId} onChange={(value) => {
+                    setEmployeeId(value)
+                    setPin('')
+                    setError('')
+                  }} disabled={verifying} />
+                  <div className="pin-field">
+                    <label className="field" htmlFor="employee-pin">PIN karyawan</label>
+                    <div className="input-with-action">
+                      <input id="employee-pin" type={visible ? 'text' : 'password'} inputMode="numeric" autoComplete="off"
+                        placeholder="Masukkan PIN" required pattern="[0-9]{6,12}" maxLength={12} value={pin} disabled={verifying}
+                        onChange={(event) => { setPin(event.target.value.replace(/[^0-9]/g, '')); setError('') }} />
+                      <button type="button" className="button button-quiet" aria-controls="employee-pin" disabled={verifying} onClick={() => setVisible((value) => !value)}>
+                        {visible ? 'Sembunyikan' : 'Tampilkan'}
+                      </button>
+                    </div>
+                  </div>
+                  {!demoMode && <label className="remember-account">
+                    <input type="checkbox" checked={remember} disabled={verifying} onChange={event => setRemember(event.target.checked)} />
+                    <span>Tetap masuk di perangkat ini <small>Hilangkan centang jika perangkat dipakai bersama.</small></span>
+                  </label>}
+                  {error && <Notice tone="error">{error}</Notice>}
+                  <button className="button button-primary w-full" type="submit" disabled={verifying || !online}>
+                    {verifying ? 'Memeriksa PIN…' : 'Lanjutkan'}
+                  </button>
+                </form>
+              ) : <Notice>Belum ada karyawan aktif. Hubungi Owner.</Notice>)}
+            </section>
+          )}
+          {demoMode && <footer className="demo-footer">
+            <span className="demo-indicator" aria-hidden="true" />
+            {stage === 'selection' ? 'Mode demo · PIN contoh ' + demoPin : 'Mode demo · Data sementara'}
+          </footer>}
+        </div>
       </main>
     </>
   )

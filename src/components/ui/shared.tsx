@@ -8,7 +8,7 @@ export function Header({ children }: { children?: ReactNode }) {
     <header className="site-header">
       <div className="header-inner">
         <Link className="brand" to="/">
-          <span className="brand-mark" aria-hidden="true"><span /></span>
+          <img className="brand-mark" src="/tea-mark.svg" width={40} height={40} alt="" />
           <span>{appName}</span>
         </Link>
         {children}
