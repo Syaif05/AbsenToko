@@ -159,3 +159,9 @@ Migrasi `20261111144817_owner_schedule_and_store_deletion.sql` menambah penyimpa
 Klik sel jadwal untuk memilih P, M, S, O, atau mengosongkannya. Template Excel memakai satu tab Jadwal dengan ID karyawan tersembunyi. Template lama untuk toko dan bulan yang sama tetap dapat diimpor. Sel kosong dalam file mempertahankan shift yang sudah tersimpan.
 
 Pindahkan atau arsipkan karyawan yang masih terdaftar sebelum menghapus tokonya. Penghapusan toko juga menghapus jadwal toko tersebut. Absensi dan bukti tetap tersedia di rekap semua toko dengan toko historis belum tercatat.
+
+## Reset data absensi uji
+
+Migrasi `20261111150722_owner_attendance_reset.sql` menambah reset dari **Pengaturan → Reset Data Absensi**. Terapkan migrasi sebelum memasang ulang `owner-api` dan frontend.
+
+Owner harus mengetik `RESET` untuk menghapus seluruh catatan absensi dan bukti terkait. Reset mempertahankan akun, karyawan, toko, jadwal, dan nama aplikasi. Foto dihapus melalui Storage API. Jika penghapusan foto terhenti, ulangi di dialog yang sama untuk memakai tanda terima yang sama. Foto yang masih menunggu pembersihan tetap tercatat di tabel privat sampai Storage mengonfirmasi penghapusan.

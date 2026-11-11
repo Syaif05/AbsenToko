@@ -199,6 +199,9 @@ async function write(operation: string, id: string, fields = {}) {
   return result
 }
 
+export const resetAttendance = (id: string, confirmation: string) =>
+  invoke<{ complete: boolean; deleted: number }>('reset_attendance', id, { confirmation })
+
 export const getPrivatePhoto = (id: string, signal: AbortSignal) =>
   invoke<{ url: string }>('photo', id, {}, signal)
 export const createEmployee = (id: string, name: string, storeId: string | null) =>

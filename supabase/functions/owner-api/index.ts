@@ -82,6 +82,35 @@ Deno.serve(async (request) => {
     if (!limit.data)
       return respond({ error: 'Terlalu banyak permintaan. Coba lagi sebentar.' }, 429)
 
+    if (operation === 'reset_attendance') {
+      if (body.confirmation !== 'RESET') {
+        return respond({ error: 'Ketik RESET untuk mengonfirmasi.' }, 400)
+      }
+      const reset = await admin.rpc('owner_reset_attendance', { p_owner: user.id, p_request: id })
+      if (
+        reset.error ||
+        !Number.isInteger(reset.data?.deleted) ||
+        !Array.isArray(reset.data?.paths)
+      ) {
+        return respond({ error: 'Reset belum dikonfirmasi. Coba lagi dari dialog yang sama.' }, 503)
+      }
+      const paths: string[] = reset.data.paths
+      if (!paths.length) return respond({ ok: true, complete: true, deleted: reset.data.deleted })
+
+      const removed = await admin.storage.from('attendance-photos').remove(paths)
+      if (removed.error) {
+        return respond(
+          { error: 'Catatan sudah direset, tetapi foto masih menunggu penghapusan. Coba lagi.' },
+          503,
+        )
+      }
+      const finished = await admin.rpc('owner_finish_attendance_reset_photos', { p_paths: paths })
+      if (finished.error || typeof finished.data !== 'boolean') {
+        return respond({ error: 'Pembersihan foto belum dikonfirmasi. Coba lagi.' }, 503)
+      }
+      return respond({ ok: true, complete: finished.data, deleted: reset.data.deleted })
+    }
+
     if (operation === 'photo') {
       const { data: evidence, error } = await admin
         .from('attendance_evidence')
