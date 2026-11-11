@@ -1,0 +1,7 @@
+body { font: 14px system-ui, sans-serif; margin: 24px; color: #18382d; }
+table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+th, td { border: 1px solid #aaa; padding: 8px; text-align: left; overflow-wrap: anywhere; }
+th { background: #e1efda; }
+button { padding: 12px; cursor: pointer; }
+@media print { button { display: none; } tr { break-inside: avoid; } thead { display: table-header-group; } }
+@page { size: A4 landscape; margin: 12mm; }

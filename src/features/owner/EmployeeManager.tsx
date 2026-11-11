@@ -9,6 +9,7 @@ import { createEmployee, renameEmployee, resetEmployeePin, saveStore, setEmploye
 type Screen =
   | { kind: 'list' }
   | { kind: 'stores' }
+  | { kind: 'profile'; employee: Employee; pin?: string }
   | { kind: 'edit'; employee?: Employee }
   | { kind: 'confirm'; employee: Employee; action: 'reset' | 'toggle' }
   | { kind: 'pin'; name: string; pin: string }
@@ -89,7 +90,7 @@ export function EmployeeManager({ employees, stores, onChange, onClose }: {
     void run(async () => {
       if (action === 'reset') {
         const { pin } = await resetEmployeePin(employee.id, newPin || undefined)
-        go({ kind: 'pin', name: employee.name, pin })
+        go({ kind: 'profile', employee, pin })
       } else {
         await setEmployeeActive(employee.id, !employee.active)
         go({ kind: 'list' })
@@ -105,7 +106,7 @@ export function EmployeeManager({ employees, stores, onChange, onClose }: {
         setPinUnavailable(true)
         return
       }
-      go({ kind: 'pin', name: employee.name, pin })
+      go({ kind: 'profile', employee, pin })
     }, false)
   }
 
@@ -125,9 +126,11 @@ export function EmployeeManager({ employees, stores, onChange, onClose }: {
     (!filterStore || (employee.storeId ?? 'unassigned') === filterStore)
     && employee.name.toLocaleLowerCase('id').includes(search),
   ) : []
-  const pinText = screen.kind === 'pin' ? `Nama Karyawan: ${screen.name}\nPIN Absensi: ${screen.pin}` : ''
+  const pinText = screen.kind === 'profile' && screen.pin
+    ? `Nama Karyawan: ${screen.employee.name}\nToko: ${storeNames.get(screen.employee.storeId ?? '') ?? 'Belum ditempatkan'}\nPIN Absensi: ${screen.pin}`
+    : screen.kind === 'pin' ? `Nama Karyawan: ${screen.name}\nPIN Absensi: ${screen.pin}` : ''
 
-  const title = screen.kind === 'edit' ? (screen.employee ? 'Edit Karyawan' : 'Tambah Karyawan')
+  const title = screen.kind === 'profile' ? 'Profil Karyawan' : screen.kind === 'edit' ? (screen.employee ? 'Edit Karyawan' : 'Tambah Karyawan')
     : screen.kind === 'pin' ? 'PIN Karyawan'
       : screen.kind === 'confirm' ? (screen.action === 'reset' ? 'Ubah PIN' : screen.employee.active ? 'Nonaktifkan Karyawan' : 'Aktifkan Karyawan')
         : screen.kind === 'stores' ? 'Kelola Toko' : 'Kelola Karyawan'
@@ -171,12 +174,27 @@ export function EmployeeManager({ employees, stores, onChange, onClose }: {
                       {employee.active ? 'Aktif' : 'Nonaktif'}
                     </span>
                   </div>
-                  <button className="button button-secondary" type="button" onClick={() => edit(employee)} aria-label={'Edit ' + employee.name}>Edit</button>
+                  <button className="button button-secondary" type="button" onClick={() => go({ kind: 'profile', employee })} aria-label={'Profil ' + employee.name}>Profil</button>
                 </li>
               ))}
             </ul> : <p className="manager-empty muted">{employees.length ? 'Tidak ada karyawan yang cocok.' : 'Belum ada karyawan.'}</p>}
           </>
         )}
+        {screen.kind === 'profile' && <>
+          <div className="manager-pin">
+            <h3>{screen.employee.name}</h3>
+            <p>{storeNames.get(screen.employee.storeId ?? '') ?? 'Belum ditempatkan'}</p>
+            <p className="muted">{screen.employee.active ? 'Aktif' : 'Nonaktif'}</p>
+            {screen.pin ? <output className="issued-pin" aria-label="PIN aktif">{screen.pin}</output> : <p>PIN disembunyikan</p>}
+          </div>
+          {screen.pin ? <button className="button button-secondary" onClick={() => void copyPin(pinText)}>Salin Nama dan PIN</button>
+            : <button className="button button-secondary" disabled={busy || !online} onClick={() => revealPin(screen.employee)}>Lihat PIN</button>}
+          {copyFallback && <label className="field">Salin teks secara manual
+            <textarea readOnly rows={3} value={pinText} onFocus={event => event.currentTarget.select()} />
+          </label>}
+          <button className="button button-primary" disabled={busy} onClick={() => edit(screen.employee)}>Edit Profil / Ubah PIN</button>
+          <button className="button button-quiet" disabled={busy} onClick={() => go({ kind: 'list' })}>Kembali</button>
+        </>}
         {screen.kind === 'stores' && <>
           <form className="stack" onSubmit={event => {
             event.preventDefault()

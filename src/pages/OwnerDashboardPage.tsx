@@ -5,6 +5,8 @@ import { TeaHero } from '../components/ui/TeaHero'
 import { useOnline } from '../features/attendance/browser'
 import { displayDate, displayTime, todayWib } from '../features/attendance/dates'
 import type { Attendance, Employee, Store } from '../features/attendance/types'
+import { exportReport, reportRows } from '../features/owner/report'
+import type { ReportFormat } from '../features/owner/report'
 import { loadDashboard } from '../features/owner/api'
 import { Dialog } from '../components/ui/Dialog'
 
@@ -44,6 +46,7 @@ function EmployeeRow({ employee, record, onClick }: {
 }
 
 export default function OwnerDashboardPage({ onLogout }: { onLogout: () => Promise<void> }) {
+  const [exportFormat, setExportFormat] = useState<ReportFormat>('csv')
   const [date, setDate] = useState(todayWib)
   const [snapshot, setSnapshot] = useState<{ date: string; records: Attendance[]; employees: Employee[]; stores: Store[] }>()
   const [storeFilter, setStoreFilter] = useState('')
@@ -148,6 +151,23 @@ export default function OwnerDashboardPage({ onLogout }: { onLogout: () => Promi
                 {refreshing ? 'Memuat…' : 'Perbarui'}
               </button>
             </div>
+          </div>
+          <div className="report-toolbar">
+            <label className="field"><span>Format laporan</span>
+              <select value={exportFormat} onChange={event => setExportFormat(event.target.value as ReportFormat)}>
+                <option value="csv">CSV (Excel / Sheets)</option>
+                <option value="json">JSON</option>
+                <option value="print">PDF / Cetak</option>
+              </select>
+            </label>
+            <button className="button button-secondary" disabled={!hasData || refreshing || !!error || !online} onClick={() => {
+              try {
+                exportReport(exportFormat, reportRows(visible, records, stores, date), date,
+                  stores.find(store => store.id === storeFilter)?.name ?? 'Semua toko')
+              } catch (error) {
+                setError(errorMessage(error, 'Laporan belum bisa diunduh.'))
+              }
+            }}>Export Laporan</button>
           </div>
           {!online && <Notice tone="warning">Koneksi terputus. Rekap diperbarui saat koneksi kembali.</Notice>}
           {error && <Notice tone="error">{error}</Notice>}
