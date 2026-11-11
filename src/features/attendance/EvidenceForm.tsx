@@ -13,7 +13,7 @@ import type { Action } from './types'
 const freshForMs = 120_000
 
 export function EvidenceForm({ session, action, headingRef, onBack, onSuccess }: {
-  session: Session; action: Action; headingRef: Ref<HTMLHeadingElement>; onBack: () => Promise<void>; onSuccess: (at: string) => void
+  session: Session; action: Action; headingRef: Ref<HTMLHeadingElement>; onBack: () => void; onSuccess: (at: string) => void
 }) {
   const [photo, setPhoto] = useState<Blob | null>(null)
   const [gps, setGps] = useState<GpsState>({ kind: 'idle' })
@@ -100,12 +100,7 @@ export function EvidenceForm({ session, action, headingRef, onBack, onSuccess }:
       <div className="capture-intro">
         <div className="capture-heading">
           <h2 ref={headingRef} tabIndex={-1}>{actionLabels[action]}</h2>
-          <button className="button button-quiet" type="button" disabled={sending} onClick={async () => {
-            if (submission.current) return
-            submission.current = true
-            setSending(true)
-            await onBack()
-          }}>Kembali</button>
+          <button className="button button-quiet" type="button" disabled={sending} onClick={onBack}>Kembali</button>
         </div>
         <p className="muted">{demoMode ? 'Bukti demo hanya tersedia di tab ini sampai dimuat ulang.' : 'Foto dan lokasi disimpan sebagai bukti absensi dan dapat dilihat oleh Owner.'}</p>
       </div>

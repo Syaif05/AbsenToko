@@ -13,13 +13,16 @@ function cameraError(error: unknown) {
 }
 
 function snapshot(video: HTMLVideoElement) {
-  const ratio = Math.min(1, 960 / Math.max(video.videoWidth, video.videoHeight))
+  const width = Math.min(video.videoWidth, video.videoHeight * 3 / 4)
+  const height = width * 4 / 3
+  const ratio = Math.min(1, 960 / height)
   const canvas = document.createElement('canvas')
-  canvas.width = Math.round(video.videoWidth * ratio)
-  canvas.height = Math.round(video.videoHeight * ratio)
+  canvas.width = Math.round(width * ratio)
+  canvas.height = Math.round(height * ratio)
   const context = canvas.getContext('2d')
   if (!context) throw new Error('Foto belum bisa diambil.')
-  context.drawImage(video, 0, 0, canvas.width, canvas.height)
+  context.drawImage(video, (video.videoWidth - width) / 2, (video.videoHeight - height) / 2,
+    width, height, 0, 0, canvas.width, canvas.height)
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((photo) => {
       if (photo?.type === 'image/jpeg' && photo.size <= 1_000_000) resolve(photo)
@@ -31,6 +34,7 @@ function snapshot(video: HTMLVideoElement) {
 export function CameraCapture({ photo, onPhoto, onStart, disabled }: {
   photo: Blob | null; onPhoto: (photo: Blob | null) => void; onStart: () => void; disabled: boolean
 }) {
+  const dialog = useRef<HTMLDialogElement>(null)
   const video = useRef<HTMLVideoElement>(null)
   const stream = useRef<MediaStream | null>(null)
   const operation = useRef(0)
@@ -45,6 +49,15 @@ export function CameraCapture({ photo, onPhoto, onStart, disabled }: {
     stream.current = null
   }, [])
 
+  function close() {
+    operation.current += 1
+    stream.current?.getTracks().forEach((track) => track.stop())
+    stream.current = null
+    if (video.current) video.current.srcObject = null
+    dialog.current?.close()
+    setPhase('idle')
+  }
+
   async function open() {
     const current = ++operation.current
     setError('')
@@ -53,7 +66,7 @@ export function CameraCapture({ photo, onPhoto, onStart, disabled }: {
       setError('Kamera tidak tersedia. Buka halaman ini melalui HTTPS atau localhost.')
       return
     }
-    onPhoto(null)
+    dialog.current?.showModal()
     onStart()
     setPhase('opening')
     try {
@@ -77,8 +90,8 @@ export function CameraCapture({ photo, onPhoto, onStart, disabled }: {
       setPhase('live')
     } catch (error) {
       if (current !== operation.current) return
+      close()
       setError(cameraError(error))
-      setPhase('idle')
     }
   }
 
@@ -90,11 +103,8 @@ export function CameraCapture({ photo, onPhoto, onStart, disabled }: {
     try {
       const captured = await snapshot(video.current)
       if (current !== operation.current) return
-      stream.current?.getTracks().forEach((track) => track.stop())
-      stream.current = null
-      video.current.srcObject = null
+      close()
       onPhoto(captured)
-      setPhase('idle')
     } catch (error) {
       if (current !== operation.current) return
       setError(error instanceof Error ? error.message : 'Foto belum bisa diambil.')
@@ -106,25 +116,38 @@ export function CameraCapture({ photo, onPhoto, onStart, disabled }: {
   return (
     <section className="capture-section" aria-label="Foto absensi">
       <div className="viewfinder">
-        <video ref={video} hidden={!showVideo} autoPlay muted playsInline onCanPlay={() => setReady(true)} aria-label="Pratinjau kamera" />
-        {preview && <img src={preview} alt="Pratinjau foto absensi" />}
-        {!showVideo && !preview && (
+        {preview ? <img src={preview} alt="Pratinjau foto absensi" /> : (
           <div className="camera-placeholder">
             <span className="camera-icon" aria-hidden="true" />
-            <span>{phase === 'opening' ? 'Menunggu akses kamera…' : 'Foto absensi'}</span>
+            <span>Foto absensi</span>
           </div>
         )}
       </div>
-      {error && <Notice tone="error">{error}</Notice>}
-      {showVideo ? (
-        <button className="button button-secondary w-full" type="button" disabled={!ready || phase === 'capturing'} onClick={takePhoto}>
-          {phase === 'capturing' ? 'Memproses foto…' : 'Ambil Foto'}
-        </button>
-      ) : (
-        <button className="button button-secondary w-full" type="button" disabled={disabled || phase === 'opening'} onClick={open}>
-          {photo ? 'Ambil Ulang Foto' : error ? 'Coba Lagi Kamera' : phase === 'opening' ? 'Membuka kamera…' : 'Aktifkan Kamera dan Lokasi'}
-        </button>
-      )}
+      {error && phase === 'idle' && <Notice tone="error">{error}</Notice>}
+      <button className="button button-secondary w-full" type="button" disabled={disabled} onClick={open}>
+        {photo ? 'Ambil Ulang Foto' : error ? 'Coba Lagi Kamera' : 'Aktifkan Kamera dan Lokasi'}
+      </button>
+      <dialog ref={dialog} className="camera-dialog" aria-labelledby="camera-title" onCancel={event => {
+        event.preventDefault()
+        close()
+      }}>
+        <div className="camera-screen">
+          <div className="camera-toolbar">
+            <h3 id="camera-title">Kamera absensi</h3>
+            <button className="button button-secondary" type="button" onClick={close}>Tutup Kamera</button>
+          </div>
+          <div className="camera-stage">
+            <video ref={video} hidden={!showVideo} autoPlay muted playsInline onCanPlay={() => setReady(true)} aria-label="Pratinjau kamera potret" />
+            {!showVideo && <p role="status">Menunggu akses kamera…</p>}
+          </div>
+          <div className="camera-controls">
+            {error && phase !== 'idle' && <Notice tone="error">{error}</Notice>}
+            <button className="button button-primary" type="button" disabled={!ready || phase !== 'live'} onClick={takePhoto}>
+              {phase === 'capturing' ? 'Memproses foto…' : 'Ambil Foto'}
+            </button>
+          </div>
+        </div>
+      </dialog>
     </section>
   )
 }

@@ -45,12 +45,13 @@ Tes SQL memeriksa konfigurasi bucket dan aturan akses database. Saat bucket koso
 | `verify` | `operation`, `employee_id`, `pin` | PIN karyawan |
 | `status` | `{"operation":"status"}` | `Authorization: Bearer TOKEN` |
 | `prepare` | `operation`, `attempt_id` UUID, `action` IN atau OUT | Token sesi |
+| `logout` | `operation` | Token sesi |
 | `receipt` | `operation`, `attempt_id` UUID | Token sesi |
 | `submit` | `operation`, `attempt_id`, `photo` base64 JPEG tanpa prefix, `latitude`, `longitude`, `accuracy_m` | Token sesi |
 
-Simpan `attempt_id` yang sama saat retry. Jika respons submit hilang, ulangi submit dengan ID tersebut untuk memperoleh hasil commit sebelumnya selama sesi belum kedaluwarsa. Setelah sesi habis, verifikasi PIN lagi untuk membaca status terbaru. Setelah berhasil, hapus token dan PIN dari state UI.
+Simpan `attempt_id` yang sama saat retry. Jika respons submit hilang, ulangi submit dengan ID tersebut untuk memperoleh hasil commit sebelumnya selama sesi belum kedaluwarsa. Setelah sesi habis, verifikasi PIN lagi untuk membaca status terbaru. PIN dibersihkan setelah verifikasi. Setelah absen, sesi tetap aktif sampai kedaluwarsa atau pengguna keluar.
 
-Pengaturan masa sesi PIN (awal 600 detik) dan batas sesi kerja (awal 86400 detik) berada di `attendance_private.settings`. Hash PIN Argon2id memakai helper `functions/_shared/pin.ts`; helper ini juga akan dipakai manajemen karyawan pada fase berikutnya. Format foto adalah JPEG maksimal 1.000.000 byte, sisi maksimal 2048 piksel dan maksimal 4 megapiksel. Lokasi segar tetap harus diambil oleh klien. Server memberi cap waktu commit.
+Pengaturan masa sesi PIN (default 86400 detik setelah migrasi akun) dan batas sesi kerja (awal 86400 detik) berada di `attendance_private.settings`. Hash PIN Argon2id memakai helper `functions/_shared/pin.ts`; helper ini juga akan dipakai manajemen karyawan pada fase berikutnya. Format foto adalah JPEG maksimal 1.000.000 byte, sisi maksimal 2048 piksel dan maksimal 4 megapiksel. Lokasi segar tetap harus diambil oleh klien. Server memberi cap waktu commit.
 
 Cleanup upload gagal tersedia di `scripts/cleanup.ts`. Operator dapat menjalankannya secara terkontrol menggunakan Deno dengan environment server, melalui `deno run --allow-env --allow-net --config supabase/deno.json supabase/scripts/cleanup.ts`. Cleanup memilih maksimal 100 intent tanpa hasil yang sudah kedaluwarsa lebih dari satu jam. Penghapusan Storage dilakukan sebelum pembersihan intent database. Catatan dan foto absensi yang sudah committed mempunyai kebijakan retensi terpisah sesuai persetujuan Owner.
 
@@ -64,3 +65,16 @@ Jalankan `deno task --config supabase/deno.json check` dan `deno task --config s
 4. Jalankan frontend dan masuk di `/owner/login`. Uji rekap pada tanggal dengan absensi, buka bukti privat, lalu coba tambah, edit, aktif/nonaktif, dan reset PIN pada karyawan uji. Pastikan akun Auth yang belum diprovisioning sebagai Owner ditolak.
 
 Foto dibuka dari bucket privat melalui URL bertanda tangan yang berlaku 60 detik. PIN karyawan dibuat oleh server dan tampil sekali setelah perubahan berhasil. Audit menyimpan UID Owner, ID karyawan, tindakan, dan waktu. Jika respons pembuatan hilang setelah penyimpanan, perbarui daftar dan reset PIN karyawan yang sudah tercatat.
+
+## Pembaruan akun karyawan
+
+1. Di Supabase **SQL Editor**, jalankan seluruh file [migrasi sesi akun](migrations/20261111051138_employee_account_sessions.sql) setelah migrasi sebelumnya. Untuk memeriksa hasil, jalankan [uji akun karyawan](tests/employee_account_sessions.sql) di staging; data uji di-rollback.
+2. Dari folder proyek terbaru, jalankan perintah berikut, lalu pilih **Yes** saat CLI meminta konfirmasi:
+
+   ```sh
+   npx supabase@3.1.0 functions deploy attendance-api --remote=PROJECT_REF --use-api
+   ```
+
+3. Pastikan Vercel memakai commit terbaru. Uji dengan akun karyawan pada perangkat pribadi: masuk dengan PIN, muat ulang halaman, kirim absen masuk, kembali ke akun, lalu lakukan absen pulang tanpa memasukkan PIN lagi. **Keluar Akun** mencabut sesi; membuka kembali halaman kemudian meminta PIN.
+
+Browser hanya menyimpan token sesi, identitas karyawan, dan waktu kedaluwarsa bila opsi **Tetap masuk di perangkat ini** dicentang. PIN, foto dan lokasi tidak ikut tersimpan. Sesi baru berlaku sampai 24 jam; durasi khusus yang sebelumnya sudah diatur tetap dipertahankan. Pengaturan jendela absen pulang terpisah dari durasi login.

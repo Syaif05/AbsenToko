@@ -24,6 +24,9 @@ class Failure extends Error {
 }
 async function rpc(name: string, args: Record<string, unknown>) {
   const { data, error } = await client.rpc(name, args)
+  if (error?.code === 'P0001' && error.message === 'invalid session') {
+    throw new Failure(401, 'Sesi berakhir. Masukkan PIN kembali.')
+  }
   if (error) throw new Failure(409, 'Permintaan tidak dapat diproses. Periksa status absensi kembali.')
   return data
 }
@@ -100,6 +103,10 @@ Deno.serve(async request => {
     const hash = await digest(encoder.encode(token))
     await limit('session:' + hash, 30, 60)
     if (body.operation === 'status') return respond(await rpc('attendance_status', { p_hash: hash }))
+    if (body.operation === 'logout') {
+      await rpc('attendance_end_session', { p_hash: hash })
+      return respond({ ok: true })
+    }
     if (!uuid(body.attempt_id)) throw new Failure(400, 'ID percobaan tidak valid.')
     if (body.operation === 'prepare') {
       if (!['IN', 'OUT'].includes(body.action)) throw new Failure(400, 'Jenis absensi tidak valid.')

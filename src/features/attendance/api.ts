@@ -2,7 +2,39 @@ import * as demo from '../demo/store'
 import type { Action, AttendanceStatus, Employee, Location } from './types'
 
 export const demoMode = import.meta.env.VITE_ATTENDANCE_MODE === 'demo'
-export type Session = { employee: Employee; status: AttendanceStatus; token?: string; expiresAt?: number }
+export type Account = { employee: Employee; token?: string; expiresAt?: number }
+export type Session = Account & { status: AttendanceStatus }
+export class SessionEnded extends Error {}
+const tokenPattern = /^[0-9a-f]{64}$/
+export const savedAccountKey = 'absentoko:employee-account:' + import.meta.env.VITE_SUPABASE_URL?.trim()
+
+export function readSavedAccount(): Account | null {
+  if (demoMode) return null
+  try {
+    const stored = JSON.parse(localStorage.getItem(savedAccountKey) ?? 'null')
+    if (typeof stored?.token === 'string' && tokenPattern.test(stored.token)
+      && Number.isFinite(stored.expiresAt) && stored.expiresAt > Date.now()
+      && typeof stored.employee?.id === 'string' && typeof stored.employee?.name === 'string') return stored
+  } catch { /* Storage may be disabled. */ }
+  return null
+}
+
+export function saveAccount(account: Account) {
+  if (!account.token) return false
+  try {
+    const { employee, token, expiresAt } = account
+    localStorage.setItem(savedAccountKey, JSON.stringify({ employee, token, expiresAt }))
+    return true
+  } catch { return false }
+}
+
+export function forgetAccount(account: Account) {
+  if (!account.token) return
+  try {
+    const stored = JSON.parse(localStorage.getItem(savedAccountKey) ?? 'null')
+    if (stored?.token === account.token) localStorage.removeItem(savedAccountKey)
+  } catch { /* Storage may be disabled. */ }
+}
 type Receipt = { action: Action; recorded_at: string }
 type StatusResponse = {
   status: AttendanceStatus['kind']
@@ -21,6 +53,7 @@ async function call<T>(operation: string, fields = {}, token?: string): Promise<
   }).catch(() => { throw new Error('Koneksi ke layanan absensi terputus. Coba lagi.') })
   const result = await response.json().catch(() => null)
   if (!response.ok || !result) {
+    if (token && response.status === 401) throw new SessionEnded('Sesi berakhir. Masukkan PIN kembali.')
     throw new Error(typeof result?.error === 'string' ? result.error : 'Layanan absensi belum tersedia.')
   }
   return result as T
@@ -49,13 +82,17 @@ export async function verifyEmployee(employee: Employee, pin: string): Promise<S
   if (demoMode) return demo.verifyPin(employee.id, pin)
   const result = await call<StatusResponse & { token: string; expires_at: string }>('verify', { employee_id: employee.id, pin })
   const expiresAt = Date.parse(result.expires_at)
-  if (!/^[0-9a-f]{64}$/.test(result.token) || !Number.isFinite(expiresAt)) throw new Error('Sesi absensi tidak valid.')
+  if (!tokenPattern.test(result.token) || !Number.isFinite(expiresAt)) throw new Error('Sesi absensi tidak valid.')
   return { employee, status: readStatus(result), token: result.token, expiresAt }
 }
 
-export async function refreshStatus(session: Session) {
+export async function refreshStatus(session: Account) {
   if (demoMode) return demo.statusFor(session.employee.id)
   return readStatus(await call<StatusResponse>('status', {}, session.token))
+}
+
+export async function endAccount(account: Account) {
+  if (!demoMode) await call('logout', {}, account.token)
 }
 
 async function photoBase64(photo: Blob): Promise<string> {
