@@ -38,18 +38,21 @@ export function CameraCapture({ photo, onPhoto, onStart, disabled }: {
   const video = useRef<HTMLVideoElement>(null)
   const stream = useRef<MediaStream | null>(null)
   const operation = useRef(0)
+  const openingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [phase, setPhase] = useState<'idle' | 'opening' | 'live' | 'capturing'>('idle')
   const [ready, setReady] = useState(false)
   const [error, setError] = useState('')
   const preview = usePhotoUrl(photo)
 
   useEffect(() => () => {
+    clearTimeout(openingTimer.current)
     operation.current += 1
     stream.current?.getTracks().forEach((track) => track.stop())
     stream.current = null
   }, [])
 
   function close() {
+    clearTimeout(openingTimer.current)
     operation.current += 1
     stream.current?.getTracks().forEach((track) => track.stop())
     stream.current = null
@@ -69,6 +72,11 @@ export function CameraCapture({ photo, onPhoto, onStart, disabled }: {
     dialog.current?.showModal()
     onStart()
     setPhase('opening')
+    openingTimer.current = setTimeout(() => {
+      if (current !== operation.current) return
+      close()
+      setError('Kamera belum merespons. Periksa izin kamera pada browser, tutup aplikasi kamera lain, lalu coba lagi. Jika memakai browser dalam WhatsApp, buka tautan di Chrome atau Safari.')
+    }, 20_000)
     try {
       let source: MediaStream
       try {
@@ -88,6 +96,7 @@ export function CameraCapture({ photo, onPhoto, onStart, disabled }: {
       stream.current = source
       video.current.srcObject = source
       setPhase('live')
+      await video.current.play()
     } catch (error) {
       if (current !== operation.current) return
       close()
@@ -137,7 +146,7 @@ export function CameraCapture({ photo, onPhoto, onStart, disabled }: {
             <button className="button button-secondary" type="button" onClick={close}>Tutup Kamera</button>
           </div>
           <div className="camera-stage">
-            <video ref={video} hidden={!showVideo} autoPlay muted playsInline onCanPlay={() => setReady(true)} aria-label="Pratinjau kamera potret" />
+            <video ref={video} hidden={!showVideo} autoPlay muted playsInline onCanPlay={() => { clearTimeout(openingTimer.current); setReady(true) }} aria-label="Pratinjau kamera potret" />
             {!showVideo && <p role="status">Menunggu akses kamera…</p>}
           </div>
           <div className="camera-controls">

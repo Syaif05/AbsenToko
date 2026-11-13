@@ -26,7 +26,13 @@ async function rpc(name: string, args: Record<string, unknown>) {
   if (error?.code === 'P0001' && error.message === 'invalid session') {
     throw new Failure(401, 'Sesi berakhir. Pilih toko dan nama kembali.')
   }
-  if (error) throw new Failure(409, 'Permintaan tidak dapat diproses. Periksa status absensi kembali.')
+  if (error) {
+    console.error('Attendance RPC failed', name, error.code)
+    if (error.message === 'expired intent' || error.message === 'invalid intent') throw new Failure(409, 'Bukti percobaan sudah tidak berlaku. Kembali ke menu absen, periksa status, lalu ambil bukti baru.')
+    if (error.message === 'invalid state') throw new Failure(409, 'Status absensi sudah berubah. Kembali ke menu absen untuk memeriksa status terbaru.')
+    if (error.message === 'too many intents') throw new Failure(429, 'Terlalu banyak percobaan aktif. Tunggu tiga menit, lalu mulai kembali.')
+    throw new Failure(503, 'Layanan penyimpanan absensi sedang bermasalah. Coba lagi atau hubungi Owner.')
+  }
   return data
 }
 async function limit(key: string, count: number, seconds: number) {

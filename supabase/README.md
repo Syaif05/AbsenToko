@@ -171,3 +171,7 @@ Owner harus mengetik `RESET` untuk menghapus seluruh catatan absensi dan bukti t
 Karyawan memilih toko dan nama, lalu masuk ke menu absensi. Kalender **Jadwal Saya** membaca jadwal Owner per bulan melalui operasi `schedule` pada `attendance-api`. RPC `attendance_my_schedule` hanya dapat dipanggil service role; identitas dan toko diturunkan dari sesi yang masih aktif. Parameter employee/store dari browser tidak digunakan. Jadwal kosong bukan libur; kode O berarti libur. Jadwal tidak mengubah bukti atau status kehadiran aktual. Nama produk tetap Teh Idaman.
 
 Pengujian: `npm test` mencakup validasi endpoint dan `supabase/tests/employee_portal_schedule.sql` mencakup isolasi karyawan, batas bulan, sesi dicabut/kedaluwarsa, karyawan nonaktif, dan izin RPC. Jalankan SQL tersebut pada database pengujian setelah seluruh migrasi; transaksi di-rollback.
+
+## Perbaikan pemeriksaan bukti (13 November 2026)
+
+Migrasi `fix_attendance_intent_session` mengganti fungsi produksi lama yang masih membaca kolom PIN yang sudah dihapus. Regresi `supabase/tests/attendance_commit_current.sql` menjalankan alur pilih karyawan → siapkan bukti → baca intent → masuk → retry → pulang pada skema terkini dalam transaksi rollback. Kamera membatasi penantian izin/video selama 20 detik, menghentikan stream terlambat setelah pembatalan, dan menyediakan pesan untuk mencoba kembali.
