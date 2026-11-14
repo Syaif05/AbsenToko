@@ -314,3 +314,19 @@ export async function loadBrand() {
   if (error) throw new Error('Pengaturan nama aplikasi gagal dimuat.')
   return data.name as string
 }
+
+// Fetch a bounded page at a time: yearly reports can exceed the REST row limit.
+export async function loadReportRecords(start: string, end: string, signal: AbortSignal): Promise<Attendance[]> {
+  const result: Attendance[] = []
+  for (let offset = 0; ; offset += 500) {
+    const { data, error } = await client().from('attendance')
+      .select('id,employee_id,store_id,work_date,check_in_at,check_out_at')
+      .gte('work_date', start).lte('work_date', end)
+      .order('work_date').order('id').range(offset, offset + 499).abortSignal(signal)
+    if (error) throw new Error('Data laporan belum bisa dimuat. Coba lagi.')
+    for (const row of data) result.push({ employeeId: row.employee_id, storeId: row.store_id, workDate: row.work_date,
+      checkIn: { at: row.check_in_at, photo: null }, checkOut: row.check_out_at ? { at: row.check_out_at, photo: null } : undefined })
+    if (data.length < 500) return result
+    if (result.length >= 50000) throw new Error('Laporan terlalu besar. Pilih rentang tanggal yang lebih pendek.')
+  }
+}

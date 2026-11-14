@@ -54,3 +54,9 @@ Ikuti [panduan Supabase Fase 5](supabase/README.md#fase-5--dashboard-owner), lal
 ## QA dan rilis Fase 6
 
 Ikuti [panduan rilis](RELEASE.md) untuk migrasi retensi teknis, pemeriksaan staging, konfigurasi hosting, dan pemulihan backup.
+
+## Unduhan periode dan pratinjau bukti
+
+Pada Ringkasan Owner, **Laporan periode** menyediakan rentang harian, minggu Senin–Minggu, bulan, tahun, atau tanggal bebas (maksimal 366 hari). Pilih toko/karyawan, tekan **Siapkan laporan**, lalu unduh Excel, CSV, JSON, atau cetak/simpan PDF. Laporan periode berisi catatan aktual; unduhan harian pada daftar tetap mengikuti filter dan menyertakan status belum masuk. Durasi tercatat merupakan selisih waktu masuk–pulang, bukan jam payroll. Data diambil per 500 catatan dan unduhan gagal secara jelas jika salah satu halaman gagal.
+
+Foto pada detail absensi ditampilkan utuh dan dapat diketuk untuk memperbesar. Gambar privat hanya diminta saat detail dibuka. Navigasi Owner mempertahankan kerangka halaman selama pemuatan; error tampilan menyediakan tombol muat ulang.

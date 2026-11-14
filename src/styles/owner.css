@@ -798,3 +798,8 @@
 .schedule-cell-button:disabled {
   cursor: default;
 }
+
+.owner-app .loading-avatar, .owner-app .loading-line,
+.page-skeleton .loading-avatar, .page-skeleton .loading-line { background: #e9e9e7; }
+.owner-app .loading-item { border-color: #ececea; border-radius: 16px; }
+.owner-export { flex-wrap: wrap; }

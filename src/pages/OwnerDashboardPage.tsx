@@ -10,6 +10,8 @@ import { loadDashboard } from '../features/owner/api'
 import { Dialog } from '../components/ui/Dialog'
 import { dashboardRows } from '../features/owner/dashboard'
 
+const ReportDownload = lazy(() => import('../features/owner/ReportDownload'))
+
 const AttendanceDetail = lazy(() =>
   import('../features/owner/AttendanceDetail').then((module) => ({
     default: module.AttendanceDetail,
@@ -30,6 +32,7 @@ export default function OwnerDashboardPage() {
   const [settled, setSettled] = useState('')
   const [error, setError] = useState('')
   const [detail, setDetail] = useState<Employee>()
+  const [reportOpen, setReportOpen] = useState(false)
   const [format, setFormat] = useState<ReportFormat>('xlsx')
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState('')
@@ -58,7 +61,7 @@ export default function OwnerDashboardPage() {
   useEffect(() => {
     if (!online) return
     const controller = new AbortController()
-    void loadDashboard(date, controller.signal).then(
+    void loadDashboard(date, AbortSignal.any([controller.signal, AbortSignal.timeout(30000)])).then(
       (result) => {
         if (controller.signal.aborted) return
         setSnapshot({ date, data: result, at: new Date().toISOString() })
@@ -91,6 +94,7 @@ export default function OwnerDashboardPage() {
         </button>
       </div>
       <div className="owner-filters">
+        <button className="button button-quiet" onClick={() => { setDate(todayWib()); setDetail(undefined) }}>Hari ini</button>
         <label className="field">
           Tanggal
           <input
@@ -144,7 +148,7 @@ export default function OwnerDashboardPage() {
               {icon}
             </span>
             <p>{label}</p>
-            <strong>{data ? value : '—'}</strong>
+            <strong>{data ? value : <span className="loading-line" aria-label="Memuat" />}</strong>
             <small>{displayDate(date)}</small>
           </article>
         ))}
@@ -193,6 +197,7 @@ export default function OwnerDashboardPage() {
             <p className="muted">{data ? rows.length + ' karyawan dalam rekap' : 'Memuat rekap'}</p>
           </div>
           <div className="owner-export">
+            <button className="button button-secondary" disabled={!data} onClick={() => setReportOpen(true)}>Laporan periode</button>
             <label className="sr-only" htmlFor="export-format">
               Format laporan
             </label>
@@ -238,6 +243,7 @@ export default function OwnerDashboardPage() {
           </div>
         </div>
         <div className="owner-table-filters">
+          <button className="button button-quiet" onClick={() => { setQuery(''); setStatus('all'); setStore('') }}>Reset filter</button>
           <label className="field">
             <span className="sr-only">Cari karyawan</span>
             <input
@@ -311,6 +317,9 @@ export default function OwnerDashboardPage() {
           </>
         )}
       </section>
+      {reportOpen && data && <Suspense fallback={<Dialog title="Laporan absensi" onClose={() => setReportOpen(false)}><Loading label="Menyiapkan laporan…" variant="form" /></Dialog>}>
+        <ReportDownload date={date} employees={data.employees} stores={data.stores} onClose={() => setReportOpen(false)} />
+      </Suspense>}
       {detail && (
         <Suspense
           fallback={

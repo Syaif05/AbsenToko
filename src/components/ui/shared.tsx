@@ -50,14 +50,12 @@ export function Notice({ children, tone = 'info' }: {
   return <p className={'notice notice-' + tone} role={tone === 'error' ? 'alert' : 'status'}>{children}</p>
 }
 
-export function Loading({ label }: { label: string }) {
-  return (
-    <div className="loading" role="status">
-      <span className="skeleton" aria-hidden="true" />
-      <span className="skeleton" aria-hidden="true" />
-      <span className="muted">{label}</span>
-    </div>
-  )
+export function Loading({ label, variant = 'rows' }: { label: string; variant?: 'rows' | 'cards' | 'form' }) {
+  return <div className={'loading loading-' + variant} role="status" aria-label={label}>
+    <div className="loading-shapes" aria-hidden="true">{Array.from({ length: variant === 'cards' ? 4 : 3 }, (_, index) =>
+      <div className="loading-item" key={index}><span className="loading-avatar" /><div><span className="loading-line" /><span className="loading-line loading-short" /></div></div>)}</div>
+    <span className="muted">{label}</span>
+  </div>
 }
 
 export function errorMessage(error: unknown, fallback: string) {

@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { NavLink, Outlet, Link, useLocation } from 'react-router'
-import { appName, Notice, errorMessage } from '../../components/ui/shared'
+import { appName, Loading, Notice, errorMessage } from '../../components/ui/shared'
 import { loadBrand } from './api'
 import { displayDate, todayWib } from '../attendance/dates'
 import '../../styles/owner.css'
@@ -98,7 +98,7 @@ export default function OwnerLayout({ onLogout }: { onLogout: () => Promise<void
         </header>
         {error && <Notice tone="error">{error}</Notice>}
         <div id="owner-content" tabIndex={-1}>
-          <Outlet />
+          <Suspense fallback={<main className="dashboard-shell"><Loading label="Memuat halaman…" variant="cards" /><Loading label="Menyiapkan data…" /></main>}><Outlet /></Suspense>
         </div>
       </div>
     </div>

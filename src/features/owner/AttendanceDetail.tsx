@@ -7,12 +7,13 @@ import type { Attendance, Evidence, Employee } from '../attendance/types'
 
 function EvidenceCard({ title, evidence }: { title: string; evidence?: Evidence }) {
   const id = evidence?.id
+  const [zoom, setZoom] = useState(false)
   const [retry, setRetry] = useState(0)
   const [photo, setPhoto] = useState<{ url: string } | { failed: true } | null>(null)
   useEffect(() => {
     if (!id) return
     const controller = new AbortController()
-    void getPrivatePhoto(id, controller.signal).then(({ url }) => {
+    void getPrivatePhoto(id, AbortSignal.any([controller.signal, AbortSignal.timeout(20000)])).then(({ url }) => {
       if (!controller.signal.aborted) setPhoto({ url })
     }, () => {
       if (!controller.signal.aborted) setPhoto({ failed: true })
@@ -30,8 +31,10 @@ function EvidenceCard({ title, evidence }: { title: string; evidence?: Evidence 
       {evidence ? (
         <>
           {photo && 'url' in photo ? (
-            <img className="evidence-image" src={photo.url} referrerPolicy="no-referrer"
+            <button type="button" className={"photo-preview" + (zoom ? " photo-expanded" : "")} onClick={() => setZoom(value => !value)} aria-expanded={zoom} aria-label={zoom ? "Perkecil foto" : "Perbesar foto"}>
+            <img decoding="async" className="evidence-image" src={photo.url} referrerPolicy="no-referrer"
               onError={() => setPhoto({ failed: true })} alt={'Bukti foto ' + title.toLowerCase()} />
+            <span>{zoom ? 'Perkecil foto' : 'Ketuk untuk memperbesar'}</span></button>
           ) : photo ? (
             <button className="button button-secondary" type="button" onClick={() => {
               setPhoto(null)

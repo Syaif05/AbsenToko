@@ -1,6 +1,7 @@
+import { PageSkeleton } from '../../components/ui/PageSkeleton'
 import { lazy, useEffect, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router'
-import { Header, Loading, Notice } from '../../components/ui/shared'
+import { Header, Notice } from '../../components/ui/shared'
 import OwnerDashboardPage from '../../pages/OwnerDashboardPage'
 import OwnerLoginPage from '../../pages/OwnerLoginPage'
 import { isOwner, ownerClient } from './api'
@@ -40,14 +41,7 @@ export default function OwnerRoutes() {
   }, [uid, retry])
 
   if (ownerClient && (uid === undefined || (uid && access?.uid !== uid))) {
-    return (
-      <>
-        <Header />
-        <main className="narrow-shell">
-          <Loading label="Memeriksa sesi Owner…" />
-        </main>
-      </>
-    )
+    return <PageSkeleton />
   }
 
   const allowed = Boolean(uid && access?.uid === uid && access.allowed)
