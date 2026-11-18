@@ -80,12 +80,13 @@ export default function OwnerDashboardPage() {
   }, [date, scope, online])
 
   useEffect(() => {
+    if (!online) return
     const controller = new AbortController()
     void loadUnfinished(AbortSignal.any([controller.signal, AbortSignal.timeout(30000)])).then(value => {
       if (!controller.signal.aborted) { setUnfinished(value); setUnfinishedError('') }
     }, () => { if (!controller.signal.aborted) setUnfinishedError('Daftar absensi belum selesai gagal dimuat. Perbarui data untuk mencoba lagi.') })
     return () => controller.abort()
-  }, [revision])
+  }, [revision, online])
 
 
   return (
@@ -155,7 +156,7 @@ export default function OwnerDashboardPage() {
       {unfinishedError && <Notice tone="error">{unfinishedError}</Notice>}
       {unfinished.length > 0 && <section className="panel stack">
         <h2>Absensi belum ditutup</h2><p className="muted">Termasuk yang masih bekerja. Catatan melewati batas sesi perlu konfirmasi Owner. Menampilkan maksimal 100 catatan terlama.</p>
-        {unfinished.map(item => <button className="button button-secondary" key={item.id} onClick={() => { setDate(item.work_date); setDetail(snapshot?.data.employees.find(person => person.id === item.employee_id)) }}>
+        {unfinished.map(item => <button className="button button-secondary" key={item.id} disabled={!snapshot?.data.employees.some(person => person.id === item.employee_id)} onClick={() => { setDate(item.work_date); setDetail(snapshot?.data.employees.find(person => person.id === item.employee_id)) }}>
           {snapshot?.data.employees.find(person => person.id === item.employee_id)?.name ?? 'Karyawan'} · {displayDate(item.work_date)} · {displayTime(item.check_in_at)} WIB — Lihat / konfirmasi
         </button>)}
       </section>}
@@ -339,7 +340,7 @@ export default function OwnerDashboardPage() {
       {reportOpen && data && <Suspense fallback={<Dialog title="Laporan absensi" onClose={() => setReportOpen(false)}><Loading label="Menyiapkan laporan…" variant="form" /></Dialog>}>
         <ReportDownload date={date} employees={data.employees} stores={data.stores} onClose={() => setReportOpen(false)} />
       </Suspense>}
-      {detail && (
+      {detail && (!data || loading ? <Dialog title={detail.name} onClose={() => setDetail(undefined)}><Loading label="Memuat catatan absensi…" />{error && <Notice tone="error">{error}</Notice>}</Dialog> : (
         <Suspense
           fallback={
             <Dialog title="Detail absensi" onClose={() => setDetail(undefined)}>
@@ -355,7 +356,7 @@ export default function OwnerDashboardPage() {
             onSaved={() => setRevision(value => value + 1)}
           />
         </Suspense>
-      )}
+      ))}
     </main>
   )
 }
