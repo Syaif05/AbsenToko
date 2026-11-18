@@ -72,6 +72,10 @@ type EvidenceRow = {
   accuracy_m: number
 }
 type AttendanceRow = {
+  id: string
+  closed_at: string | null
+  owner_confirmation_reason: string | null
+  owner_confirmed_at: string | null
   store_id: string | null
   employee_id: string
   work_date: string
@@ -104,7 +108,7 @@ export async function loadDashboard(
     client()
       .from('attendance')
       .select(
-        'employee_id,store_id,work_date,check_in_at,check_out_at,attendance_evidence(id,type,latitude,longitude,accuracy_m)',
+        'id,closed_at,owner_confirmation_reason,owner_confirmed_at,employee_id,store_id,work_date,check_in_at,check_out_at,attendance_evidence(id,type,latitude,longitude,accuracy_m)',
       )
       .eq('work_date', date)
       .abortSignal(signal),
@@ -122,6 +126,7 @@ export async function loadDashboard(
     })),
     stores: stores.data.map((row) => ({ id: row.id, name: row.name, archivedAt: row.archived_at })),
     records: (attendance.data as AttendanceRow[]).map((row) => ({
+      id: row.id, closedAt: row.closed_at, ownerConfirmationReason: row.owner_confirmation_reason, ownerConfirmedAt: row.owner_confirmed_at,
       employeeId: row.employee_id,
       storeId: row.store_id,
       workDate: row.work_date,
@@ -320,13 +325,23 @@ export async function loadReportRecords(start: string, end: string, signal: Abor
   const result: Attendance[] = []
   for (let offset = 0; ; offset += 500) {
     const { data, error } = await client().from('attendance')
-      .select('id,employee_id,store_id,work_date,check_in_at,check_out_at')
+      .select('id,closed_at,owner_confirmation_reason,owner_confirmed_at,employee_id,store_id,work_date,check_in_at,check_out_at')
       .gte('work_date', start).lte('work_date', end)
       .order('work_date').order('id').range(offset, offset + 499).abortSignal(signal)
     if (error) throw new Error('Data laporan belum bisa dimuat. Coba lagi.')
-    for (const row of data) result.push({ employeeId: row.employee_id, storeId: row.store_id, workDate: row.work_date,
+    for (const row of data) result.push({ id: row.id, closedAt: row.closed_at, ownerConfirmationReason: row.owner_confirmation_reason, ownerConfirmedAt: row.owner_confirmed_at, employeeId: row.employee_id, storeId: row.store_id, workDate: row.work_date,
       checkIn: { at: row.check_in_at, photo: null }, checkOut: row.check_out_at ? { at: row.check_out_at, photo: null } : undefined })
     if (data.length < 500) return result
     if (result.length >= 50000) throw new Error('Laporan terlalu besar. Pilih rentang tanggal yang lebih pendek.')
   }
+}
+
+export const confirmCheckout = (request: string, attendance: string, checkout: string, reason: string) =>
+  invoke<{ ok: boolean }>('confirm_checkout', request, { attendance_id: attendance, checkout, reason })
+
+export async function loadUnfinished(signal: AbortSignal) {
+  const { data, error } = await client().from('attendance').select('id,employee_id,work_date,check_in_at')
+    .is('check_out_at', null).order('check_in_at').limit(100).abortSignal(signal)
+  if (error) throw new Error('Daftar absensi belum selesai belum bisa dimuat.')
+  return data as { id: string; employee_id: string; work_date: string; check_in_at: string }[]
 }

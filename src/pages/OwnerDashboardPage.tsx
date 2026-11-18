@@ -6,7 +6,7 @@ import { displayDate, displayTime, todayWib } from '../features/attendance/dates
 import type { Employee } from '../features/attendance/types'
 import { exportReport, reportRows } from '../features/owner/report'
 import type { ReportFormat } from '../features/owner/report'
-import { loadDashboard } from '../features/owner/api'
+import { loadDashboard, loadUnfinished } from '../features/owner/api'
 import { Dialog } from '../components/ui/Dialog'
 import { dashboardRows } from '../features/owner/dashboard'
 
@@ -19,6 +19,8 @@ const AttendanceDetail = lazy(() =>
 )
 
 export default function OwnerDashboardPage() {
+  const [unfinished, setUnfinished] = useState<Awaited<ReturnType<typeof loadUnfinished>>>([])
+  const [unfinishedError, setUnfinishedError] = useState('')
   const [date, setDate] = useState(todayWib)
   const [snapshot, setSnapshot] = useState<{
     date: string
@@ -74,8 +76,17 @@ export default function OwnerDashboardPage() {
         setSettled(scope)
       },
     )
-    return () => controller.abort()
+  return () => controller.abort()
   }, [date, scope, online])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void loadUnfinished(AbortSignal.any([controller.signal, AbortSignal.timeout(30000)])).then(value => {
+      if (!controller.signal.aborted) { setUnfinished(value); setUnfinishedError('') }
+    }, () => { if (!controller.signal.aborted) setUnfinishedError('Daftar absensi belum selesai gagal dimuat. Perbarui data untuk mencoba lagi.') })
+    return () => controller.abort()
+  }, [revision])
+
 
   return (
     <main className="dashboard-shell owner-dashboard">
@@ -141,6 +152,13 @@ export default function OwnerDashboardPage() {
       {error && (
         <Notice tone="error">{error} Gunakan tombol Perbarui data untuk mencoba kembali.</Notice>
       )}
+      {unfinishedError && <Notice tone="error">{unfinishedError}</Notice>}
+      {unfinished.length > 0 && <section className="panel stack">
+        <h2>Absensi belum ditutup</h2><p className="muted">Termasuk yang masih bekerja. Catatan melewati batas sesi perlu konfirmasi Owner. Menampilkan maksimal 100 catatan terlama.</p>
+        {unfinished.map(item => <button className="button button-secondary" key={item.id} onClick={() => { setDate(item.work_date); setDetail(snapshot?.data.employees.find(person => person.id === item.employee_id)) }}>
+          {snapshot?.data.employees.find(person => person.id === item.employee_id)?.name ?? 'Karyawan'} · {displayDate(item.work_date)} · {displayTime(item.check_in_at)} WIB — Lihat / konfirmasi
+        </button>)}
+      </section>}
       <section className="owner-stats" aria-label="Ringkasan karyawan aktif">
         {stats.map(([label, value, icon]) => (
           <article key={label}>
@@ -258,6 +276,7 @@ export default function OwnerDashboardPage() {
             <select value={status} onChange={(event) => setStatus(event.target.value)}>
               <option value="all">Semua status</option>
               <option value="waiting">Belum masuk</option>
+              <option value="unconfirmed">Pulang belum dikonfirmasi</option>
               <option value="working">Sedang bekerja</option>
               <option value="done">Selesai</option>
             </select>
@@ -299,7 +318,7 @@ export default function OwnerDashboardPage() {
                         ? 'Selesai'
                         : state === 'working'
                           ? 'Sedang bekerja'
-                          : 'Belum masuk'}
+                          : state === 'unconfirmed' ? 'Pulang belum dikonfirmasi' : 'Belum masuk'}
                     </span>
                     <span className="owner-time">
                       <small>Masuk</small>
@@ -333,6 +352,7 @@ export default function OwnerDashboardPage() {
             date={date}
             record={data?.records.find((record) => record.employeeId === detail.id)}
             onClose={() => setDetail(undefined)}
+            onSaved={() => setRevision(value => value + 1)}
           />
         </Suspense>
       )}

@@ -9,7 +9,7 @@ export function dashboardRows(employees: Employee[], records: Attendance[], stor
       !store || (store === 'unassigned' ? Boolean(record) && !record?.storeId : placement === store)
     if (!matchesStore || (!record && (!employee.active || employee.archivedAt))) return []
     return [
-      { employee, record, status: record?.checkOut ? 'done' : record ? 'working' : 'waiting' },
+      { employee, record, status: record?.checkOut ? 'done' : record ? (record.closedAt || Date.now() - Date.parse(record.checkIn?.at ?? '') >= 86400000 ? 'unconfirmed' : 'working') : 'waiting' },
     ]
   })
 }

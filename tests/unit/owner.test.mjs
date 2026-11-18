@@ -118,3 +118,19 @@ test('invalid input, throttling and unconfirmed commits never succeed', async ()
   const missing = await endpoint({ rpcResult: { error: { code: 'PGRST202' } } })
   assert.equal((await missing.invoke(request)).status, 503)
 })
+
+test('checkout confirmation enforces Owner and passes a stable correction request', async () => {
+  const body = { operation: 'confirm_checkout', id: request.id, attendance_id: request.request_id, checkout: '2026-11-16T14:00:00.000Z', reason: 'Lupa absen pulang' }
+  const api = await endpoint()
+  assert.equal((await api.invoke(body)).status, 200)
+  assert.equal(api.calls.at(-1).name, 'owner_confirm_checkout')
+  assert.equal(api.calls.at(-1).args.p_request, body.id)
+  assert.equal(api.calls.at(-1).args.p_owner, 'owner')
+  assert.equal((await api.invoke({...body, reason:'x'})).status, 400)
+  assert.equal((await (await endpoint({nonOwner:true})).invoke(body)).status, 403)
+  assert.equal((await (await endpoint({rpcResult:{error:{message:'invalid checkout'}}})).invoke(body)).status, 409)
+})
+test('closed sessions remain visibly unconfirmed, never working or completed', () => {
+  const rows = dashboardRows(people, [{employeeId:'a', storeId:'new', closedAt:'2026-11-18T00:00:00Z',checkIn:{at:'2026-11-16T01:00:00Z'}}], 'new')
+  assert.equal(rows.find(row=>row.employee.id==='a').status,'unconfirmed')
+})

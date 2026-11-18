@@ -803,3 +803,6 @@
 .page-skeleton .loading-avatar, .page-skeleton .loading-line { background: #e9e9e7; }
 .owner-app .loading-item { border-color: #ececea; border-radius: 16px; }
 .owner-export { flex-wrap: wrap; }
+.checkout-confirmation { margin: 1rem 0; padding: 1rem; border: 1px solid var(--border); border-radius: 1rem; }
+.checkout-confirmation input, .checkout-confirmation textarea { width: 100%; min-width: 0; }
+.status-unconfirmed { background: #fff0d8; color: #7c4d0c; }

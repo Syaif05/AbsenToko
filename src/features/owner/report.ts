@@ -16,9 +16,10 @@ export function reportRows(employees: Employee[], records: Attendance[], stores:
       Toko: record
         ? storeNames.get(record.storeId ?? '') ?? 'Toko historis belum tercatat'
         : storeNames.get(employee.storeId ?? '') ?? 'Belum ditempatkan',
-      Status: record?.checkOut ? 'Selesai' : record ? 'Sedang Bekerja' : 'Belum Masuk',
+      Status: record?.checkOut ? 'Selesai' : record ? (record.closedAt || Date.now() - Date.parse(record.checkIn.at) >= 86400000 ? 'Pulang belum dikonfirmasi' : 'Sedang Bekerja') : 'Belum Masuk',
       'Masuk (WIB)': record ? timestamp.format(new Date(record.checkIn.at)) : '',
       'Pulang (WIB)': record?.checkOut ? timestamp.format(new Date(record.checkOut.at)) : '',
+      'Konfirmasi Owner': record?.ownerConfirmationReason ?? '',
       'Durasi tercatat (jam)': record?.checkOut ? Math.max(0, (Date.parse(record.checkOut.at) - Date.parse(record.checkIn.at)) / 3600000).toFixed(2) : '',
     }
   })
@@ -31,7 +32,7 @@ export function csvCell(value: string) {
 }
 
 export async function exportReport(format: ReportFormat, rows: ReturnType<typeof reportRows>, date: string, store: string) {
-  const headers = ['Tanggal', 'Nama', 'Toko', 'Status', 'Masuk (WIB)', 'Pulang (WIB)', 'Durasi tercatat (jam)']
+  const headers = ['Tanggal', 'Nama', 'Toko', 'Status', 'Masuk (WIB)', 'Pulang (WIB)', 'Konfirmasi Owner', 'Durasi tercatat (jam)']
   if (format === 'print') {
     const popup = window.open('', '_blank')
     if (!popup) throw new Error('Izinkan popup untuk membuka laporan PDF.')
@@ -72,10 +73,10 @@ export async function exportReport(format: ReportFormat, rows: ReturnType<typeof
     const book = new ExcelJS.Workbook()
     const sheet = book.addWorksheet('Absensi', { views: [{ state: 'frozen', ySplit: 1 }] })
     sheet.addRow(headers).font = { bold: true }
-    const widths = [15, 28, 26, 22, 24, 24, 25]
+    const widths = [15, 28, 26, 22, 24, 24, 40, 25]
     widths.forEach((width, index) => { sheet.getColumn(index + 1).width = width })
     sheet.addRows(rows.map(row => Object.values(row)))
-    sheet.autoFilter = 'A1:G1'
+    sheet.autoFilter = 'A1:H1'
     file = new Blob([new Uint8Array(await book.xlsx.writeBuffer())], {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })

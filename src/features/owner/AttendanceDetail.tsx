@@ -1,3 +1,4 @@
+import { CheckoutConfirmation } from './CheckoutConfirmation'
 import { Dialog } from '../../components/ui/Dialog'
 import { useEffect, useState } from 'react'
 import { getPrivatePhoto } from './api'
@@ -63,12 +64,14 @@ function EvidenceCard({ title, evidence }: { title: string; evidence?: Evidence 
   )
 }
 
-export function AttendanceDetail({ employee, record, date, onClose }: {
-  employee: Employee; record?: Attendance; date: string; onClose: () => void
+export function AttendanceDetail({ employee, record, date, onClose, onSaved }: {
+  employee: Employee; record?: Attendance; date: string; onClose: () => void; onSaved: () => void
 }) {
   return (
     <Dialog title={employee.name} onClose={onClose}>
       <p className="muted sheet-date">{displayDate(date)} · WIB</p>
+      {record?.ownerConfirmationReason && <p className="notice">Pulang dikonfirmasi Owner: {record.ownerConfirmationReason}. Tanpa bukti foto/GPS pulang.</p>}
+      {record && <CheckoutConfirmation record={record} onSaved={onSaved} />}
       <div className="evidence-grid">
         <EvidenceCard key={record?.checkIn.id ?? "in"} title="Absen Masuk" evidence={record?.checkIn} />
         <EvidenceCard key={record?.checkOut?.id ?? "out"} title="Absen Pulang" evidence={record?.checkOut} />

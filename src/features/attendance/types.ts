@@ -4,6 +4,10 @@ export type Action = 'IN' | 'OUT'
 export type Location = { latitude: number; longitude: number; accuracy: number }
 export type Evidence = { id?: string; at: string; location?: Location; photo: Blob | null }
 export type Attendance = {
+  id?: string
+  closedAt?: string | null
+  ownerConfirmationReason?: string | null
+  ownerConfirmedAt?: string | null
   employeeId: string
   storeId?: string | null
   workDate: string

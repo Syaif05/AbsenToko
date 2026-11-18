@@ -175,3 +175,11 @@ Pengujian: `npm test` mencakup validasi endpoint dan `supabase/tests/employee_po
 ## Perbaikan pemeriksaan bukti (13 November 2026)
 
 Migrasi `fix_attendance_intent_session` mengganti fungsi produksi lama yang masih membaca kolom PIN yang sudah dihapus. Regresi `supabase/tests/attendance_commit_current.sql` menjalankan alur pilih karyawan → siapkan bukti → baca intent → masuk → retry → pulang pada skema terkini dalam transaksi rollback. Kamera membatasi penantian izin/video selama 20 detik, menghentikan stream terlambat setelah pembatalan, dan menyediakan pesan untuk mencoba kembali.
+
+## Lupa absen pulang dan konfirmasi Owner
+
+Migrasi `attendance_resolution` mempertahankan catatan tanpa jam pulang. Setelah jendela sesi server (default 24 jam) lewat, status hari baru tidak lagi terblokir. Saat karyawan menyimpan absen masuk baru, sesi lama ditutup secara administratif (`closed_at`) dalam transaksi yang sama; `check_out_at` tetap kosong sampai Owner mengonfirmasi waktu sebenarnya. Sesi yang masih dalam jendela kerja tetap wajib pulang terlebih dahulu. Satu catatan per karyawan per tanggal tetap ditegakkan.
+
+Owner membuka **Absensi belum ditutup** atau detail tanggal lama, mengisi tanggal/jam pulang WIB serta alasan. Server memeriksa peran Owner, urutan waktu, waktu masa depan, batas 48 jam, dan benturan dengan absensi berikutnya. Konfirmasi tidak menciptakan foto atau koordinat. Alasan, UID Owner, waktu konfirmasi, request ID, dan waktu pulang tersimpan; request ulang identik tidak menggandakan audit. Catatan yang sudah selesai tidak dapat ditimpa dari fitur ini. Audit privat tetap tersimpan setelah reset absensi.
+
+Urutan rilis: jalankan migrasi, deploy `owner-api`, baru terbitkan frontend. Uji regresi `supabase/tests/attendance_resolution.sql` menggunakan fixture dan rollback. Jangan menebak jam pulang karyawan; Owner harus memasukkan waktu yang telah dikonfirmasi.
