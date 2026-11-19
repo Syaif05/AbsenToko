@@ -185,3 +185,11 @@ Owner membuka **Absensi belum ditutup** atau detail tanggal lama, mengisi tangga
 Urutan rilis: jalankan migrasi, deploy `owner-api`, baru terbitkan frontend. Uji regresi `supabase/tests/attendance_resolution.sql` menggunakan fixture dan rollback. Jangan menebak jam pulang karyawan; Owner harus memasukkan waktu yang telah dikonfirmasi.
 
 Audit lanjutan: migrasi `attendance_intent_binding` mengikat percobaan OUT ke `target_attendance_id`. Bukti lama tidak boleh menutup sesi baru setelah Owner menyelesaikan sesi asal. Percobaan OUT sebelum migrasi yang belum selesai perlu dimulai ulang; receipt yang sudah tersimpan tetap bisa dibaca. Prepare dan commit memakai urutan lock karyawan yang sama untuk mengurangi deadlock. Regresi `attendance_intent_binding.sql` menguji konfirmasi Owner di antara prepare/commit, penolakan bukti lama, serta retry bukti baru tanpa duplikasi.
+
+## Pengajuan kehadiran karyawan
+
+Karyawan dapat mengajukan tanggal kerja kemarin sampai tujuh hari sebelumnya, untuk masuk+pulang yang belum tercatat (SHIFT) atau pulang saja pada catatan masuk yang sudah ada (OUT). Waktu menggunakan WIB, tidak boleh di masa depan, dan durasi maksimal 48 jam. Satu pengajuan pending per karyawan/tanggal; retry ID sama tidak menggandakan data. Riwayat karyawan dibatasi 30 terbaru dan hanya dibaca melalui sesi yang valid.
+
+Owner melihat antrean maksimal 100 pengajuan tertua dan wajib memberi catatan untuk menyetujui/menolak. Persetujuan memeriksa ulang catatan dan benturan waktu, serta mencatat UID Owner, waktu keputusan, dan alasan. Penolakan tidak mengubah attendance. SHIFT disetujui sebagai catatan manual yang lengkap, tanpa foto/GPS buatan; OUT menggunakan transaksi konfirmasi pulang yang diaudit. Perpindahan toko saat SHIFT pending memerlukan penolakan/pengajuan ulang. Tidak ada pengubahan catatan yang sudah lengkap.
+
+Tabel `attendance_requests` memakai RLS khusus baca Owner; karyawan memakai RPC backend yang mengikat identitas ke sesi, bukan ID dari browser. Jalankan migrasi lalu deploy attendance-api dan owner-api sebelum frontend. Uji `supabase/tests/attendance_requests.sql` mencakup pending, replay, penolakan, persetujuan SHIFT/OUT, otorisasi, dan integritas bukti.

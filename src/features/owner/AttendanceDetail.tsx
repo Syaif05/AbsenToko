@@ -70,7 +70,7 @@ export function AttendanceDetail({ employee, record, date, onClose, onSaved }: {
   return (
     <Dialog title={employee.name} onClose={onClose}>
       <p className="muted sheet-date">{displayDate(date)} · WIB</p>
-      {record?.ownerConfirmationReason && <p className="notice">Pulang dikonfirmasi Owner: {record.ownerConfirmationReason}. Tanpa bukti foto/GPS pulang.</p>}
+      {record?.ownerConfirmationReason && <p className="notice">Catatan manual / konfirmasi Owner: {record.ownerConfirmationReason}. Waktu yang disetujui Owner bukan bukti kamera/GPS.</p>}
       {record && <CheckoutConfirmation key={record.id} record={record} onSaved={onSaved} />}
       <div className="evidence-grid">
         <EvidenceCard key={record?.checkIn.id ?? "in"} title="Absen Masuk" evidence={record?.checkIn} />

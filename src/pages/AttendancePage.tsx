@@ -1,3 +1,4 @@
+import { AttendanceRequests } from '../features/attendance/AttendanceRequests'
 import { EmployeeSchedule } from '../features/attendance/EmployeeSchedule'
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
@@ -241,6 +242,7 @@ export default function AttendancePage() {
                 onClick={() => setStatusReload(value => value + 1)}>Perbarui Status</button>
               <button className="button button-quiet w-full" type="button" disabled={!online || busy} onClick={logout}>Keluar Akun</button>
             </section>
+            <AttendanceRequests account={account} onSessionEnded={scheduleSessionEnded} />
             <EmployeeSchedule account={account} online={online} onSessionEnded={scheduleSessionEnded} />
             </div>
           ) : (

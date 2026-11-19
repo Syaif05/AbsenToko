@@ -345,3 +345,10 @@ export async function loadUnfinished(signal: AbortSignal) {
   if (error) throw new Error('Daftar absensi belum selesai belum bisa dimuat.')
   return data as { id: string; employee_id: string; work_date: string; check_in_at: string }[]
 }
+
+export async function loadAttendanceRequests(signal: AbortSignal) {
+  const {data,error} = await client().from('attendance_requests').select('*').eq('status','pending').order('created_at').limit(100).abortSignal(signal)
+  if(error) throw new Error('Pengajuan belum bisa dimuat.')
+  return data as import('../attendance/requests').AttendanceRequest[]
+}
+export const reviewAttendanceRequest = (id: string, approve: boolean, note: string) => invoke<{ok:boolean}>('review_request',id,{approve,note})

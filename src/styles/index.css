@@ -467,3 +467,5 @@ input::placeholder { color: #52655b; opacity: 1; }
 .page-skeleton .loading-item { background: white; }
 .photo-preview .evidence-image { aspect-ratio: auto; }
 @media(max-width:767px) { .page-skeleton { grid-template-columns:1fr; } .page-skeleton aside { display:none; } }
+.request-card { padding: 1rem; border: 1px solid var(--border); border-radius: 1rem; overflow-wrap: anywhere; }
+.request-card textarea { width: 100%; min-height: 80px; }

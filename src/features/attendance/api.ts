@@ -155,3 +155,8 @@ export async function mySchedule(account: Account, month: string): Promise<Perso
   if (demoMode) return { employee: account.employee, store: { id: 'demo', name: 'Toko Demo' }, days: [] }
   return call<PersonalSchedule>('schedule', { month }, account.token)
 }
+
+export async function employeeRequests(account: Account, fields?: { id: string; date: string; kind: 'SHIFT' | 'OUT'; checkin: string | null; checkout: string; reason: string }) {
+  if (demoMode) throw new Error('Pengajuan tersedia pada aplikasi terhubung, bukan mode demo.')
+  return (await call<{ requests: import('./requests').AttendanceRequest[] }>(fields ? 'request_attendance' : 'requests', fields ?? {}, account.token)).requests
+}

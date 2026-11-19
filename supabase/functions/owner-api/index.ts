@@ -82,6 +82,12 @@ Deno.serve(async (request) => {
     if (!limit.data)
       return respond({ error: 'Terlalu banyak permintaan. Coba lagi sebentar.' }, 429)
 
+    if (operation === 'review_request') {
+      if (typeof body.approve !== 'boolean' || typeof body.note !== 'string' || body.note.trim().length<5 || body.note.length>500) return respond({error:'Isi catatan keputusan 5–500 karakter.'},400)
+      const result = await admin.rpc('owner_review_attendance_request',{p_owner:user.id,p_id:id,p_approve:body.approve,p_note:body.note})
+      if(result.error || result.data?.ok!==true) return respond({error:'Keputusan belum tersimpan. Perbarui data: pengajuan mungkin sudah diproses, karyawan berpindah toko, atau waktu bertabrakan dengan absensi lain.'},409)
+      return respond({ok:true})
+    }
     if (operation === 'confirm_checkout') {
       if (!uuid.test(body.attendance_id ?? '') || typeof body.checkout !== 'string' || !Number.isFinite(Date.parse(body.checkout)) || typeof body.reason !== 'string' || body.reason.trim().length < 5 || body.reason.length > 500) return respond({ error: 'Isi jam pulang dan alasan (5–500 karakter).' }, 400)
       const result = await admin.rpc('owner_confirm_checkout', { p_owner: user.id, p_request: id, p_attendance: body.attendance_id, p_checkout: body.checkout, p_reason: body.reason })

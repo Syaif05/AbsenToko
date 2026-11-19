@@ -1,3 +1,4 @@
+import { AttendanceRequestQueue } from '../features/owner/AttendanceRequestQueue'
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { Loading, Notice, errorMessage } from '../components/ui/shared'
@@ -153,6 +154,7 @@ export default function OwnerDashboardPage() {
       {error && (
         <Notice tone="error">{error} Gunakan tombol Perbarui data untuk mencoba kembali.</Notice>
       )}
+      {data && <AttendanceRequestQueue employees={data.employees} onSaved={() => setRevision(v=>v+1)} />}
       {unfinishedError && <Notice tone="error">{unfinishedError}</Notice>}
       {unfinished.length > 0 && <section className="panel stack">
         <h2>Absensi belum ditutup</h2><p className="muted">Termasuk yang masih bekerja. Catatan melewati batas sesi perlu konfirmasi Owner. Menampilkan maksimal 100 catatan terlama.</p>

@@ -134,3 +134,14 @@ test('closed sessions remain visibly unconfirmed, never working or completed', (
   const rows = dashboardRows(people, [{employeeId:'a', storeId:'new', closedAt:'2026-11-18T00:00:00Z',checkIn:{at:'2026-11-16T01:00:00Z'}}], 'new')
   assert.equal(rows.find(row=>row.employee.id==='a').status,'unconfirmed')
 })
+
+test('request review validates decision and uses authenticated Owner identity', async () => {
+ const body={operation:'review_request',id:request.id,approve:true,note:'Sesuai konfirmasi'}
+ const api=await endpoint()
+ assert.equal((await api.invoke(body)).status,200)
+ assert.equal(api.calls.at(-1).name,'owner_review_attendance_request')
+ assert.equal(api.calls.at(-1).args.p_owner,'owner')
+ assert.equal((await api.invoke({...body,note:'x'})).status,400)
+ assert.equal((await (await endpoint({nonOwner:true})).invoke(body)).status,403)
+ assert.equal((await (await endpoint({rpcResult:{error:{message:'attendance conflict'}}})).invoke(body)).status,409)
+})

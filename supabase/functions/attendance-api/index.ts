@@ -137,6 +137,14 @@ Deno.serve(async request => {
     if (!token || !/^[0-9a-f]{64}$/.test(token)) throw new Failure(401, 'Pilih toko dan nama terlebih dahulu.')
     const hash = await digest(encoder.encode(token))
     await limit('session:' + hash, 30, 60)
+    if (body.operation === 'requests' || body.operation === 'request_attendance') {
+      if (body.operation === 'requests') return respond({ requests: await rpc('employee_attendance_requests', { p_hash: hash }) })
+      if (!uuid(body.id) || typeof body.date !== 'string' || !/^20\d\d-\d{2}-\d{2}$/.test(body.date) || !['SHIFT','OUT'].includes(body.kind) || typeof body.reason !== 'string' || body.reason.trim().length<5 || body.reason.length>500 || !Number.isFinite(Date.parse(body.checkout)) || (body.kind==='SHIFT' && !Number.isFinite(Date.parse(body.checkin)))) throw new Failure(400,'Lengkapi tanggal, waktu, dan alasan pengajuan.')
+      const { data, error } = await client.rpc('employee_attendance_requests', { p_hash: hash, p_id: body.id, p_date: body.date, p_kind: body.kind, p_in: body.kind==='SHIFT' ? body.checkin : null, p_out: body.checkout, p_reason: body.reason })
+      if (error?.message==='invalid session') throw new Failure(401,'Sesi berakhir. Masuk kembali.')
+      if (error) throw new Failure(409,'Pengajuan belum tersimpan. Gunakan tanggal kemarin sampai 7 hari lalu, periksa jam, catatan yang sudah ada, atau pengajuan yang masih menunggu.')
+      return respond({ requests: data })
+    }
     if (body.operation === 'schedule') {
       if (typeof body.month !== 'string' || !/^20\d\d-(0[1-9]|1[0-2])$/.test(body.month)) throw new Failure(400, 'Bulan jadwal tidak valid.')
       return respond(await rpc('attendance_my_schedule', { p_hash: hash, p_month: body.month + '-01' }))
