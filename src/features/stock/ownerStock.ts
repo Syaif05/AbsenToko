@@ -8,15 +8,15 @@ function client() {
 
 export type StockFilters = { start: string; end: string; name: string }
 export const stockPageSize = 25
-const header = 'id,employee_name,store_name,report_date,created_at,updated_at,notes,guidelines_snapshot'
-const lines = 'so_report_items(id,report_id,item_name_snapshot,category_id_snapshot,category_name_snapshot,unit_snapshot,unit_type_snapshot,raw_value,secondary_value,status_flag,sort_order)'
+const header = 'id,employee_name,store_name,report_date,created_at,updated_at,notes,guidelines_snapshot,catalog_version,contributors,requires_all,filled_count,item_count'
+const lines = 'so_report_items(id,report_id,item_name_snapshot,category_id_snapshot,category_name_snapshot,unit_snapshot,unit_type_snapshot,raw_value,secondary_value,status_flag,sort_order,last_editor,last_edit_at)'
 
 function reportsQuery(columns: string, { start, end, name }: StockFilters) {
   let query = client().from('so_reports').select(columns)
     .order('report_date', { ascending: false }).order('created_at', { ascending: false }).order('id')
   if (start) query = query.gte('report_date', start)
   if (end) query = query.lte('report_date', end)
-  if (name.trim()) query = query.ilike('employee_name', '%' + name.trim().replace(/[%_\\*]/g, '\\$&') + '%')
+  if (name.trim()) query = query.ilike('search_names', '%' + name.trim().replace(/[%_\\*]/g, '\\$&') + '%')
   return query
 }
 
@@ -39,6 +39,19 @@ export async function stockDetail(id: string) {
     .abortSignal(AbortSignal.timeout(20_000)).returns<DetailRow[]>().single()
   if (error) throw new Error('Laporan belum bisa dibuka. Coba muat kembali daftar.')
   return receiptFromRow(data)
+}
+
+export type StockChange = {
+  id: string; actor_name: string; recorded_at: string; note: string
+  changes: { item: string; before: (string | null)[]; after: (string | null)[] }[]
+}
+
+export async function stockHistory(id: string, offset: number) {
+  const { data, error } = await client().from('so_revisions').select('id,actor_name,recorded_at,note,changes')
+    .eq('report_id', id).neq('action', 'delete').order('recorded_at', { ascending: false }).order('id')
+    .range(offset, offset + 19).abortSignal(AbortSignal.timeout(15_000)).returns<StockChange[]>()
+  if (error) throw new Error('Riwayat perubahan belum bisa dimuat.')
+  return data
 }
 
 export async function* stockExportRows(filters: StockFilters) {

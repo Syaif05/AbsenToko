@@ -137,25 +137,36 @@ Deno.serve(async request => {
     if (!token || !/^[0-9a-f]{64}$/.test(token)) throw new Failure(401, 'Pilih toko dan nama terlebih dahulu.')
     const hash = await digest(encoder.encode(token))
     await limit('session:' + hash, 30, 60)
-    if (body.operation === 'stock_form' || body.operation === 'stock_save' || body.operation === 'stock_receipt') {
-      const saving = body.operation === 'stock_save'
-      if (body.operation !== 'stock_form' && !uuid(body.id)) throw new Failure(400, 'ID laporan tidak valid.')
-      if (saving && (typeof body.version !== 'string' || !/^[a-f0-9]{32}$/.test(body.version)
+    if (body.operation === 'stock_shared_form' || body.operation === 'stock_shared_save') {
+      const saving = body.operation === 'stock_shared_save'
+      if (saving && (!uuid(body.id) || (body.report_id !== null && !uuid(body.report_id))
+        || typeof body.version !== 'string' || !/^[a-f0-9]{32}$/.test(body.version)
         || typeof body.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(body.date)
         || typeof body.notes !== 'string' || body.notes.length > 500
-        || !body.values || typeof body.values !== 'object' || Array.isArray(body.values)
-        || JSON.stringify(body.values).length > 24000)) throw new Failure(400, 'Periksa isian laporan stok.')
-      const { data, error } = await client.rpc('employee_stock_opname', {
-        p_hash: hash, p_id: body.operation === 'stock_form' ? null : body.id,
-        ...(saving && { p_version: body.version, p_date: body.date, p_values: body.values, p_notes: body.notes }),
+        || !body.changes || typeof body.changes !== 'object' || Array.isArray(body.changes)
+        || Object.keys(body.changes).length > 250 || JSON.stringify(body.changes).length > 35_000)) {
+        throw new Failure(400, 'Periksa isian laporan stok.')
+      }
+      const { data, error } = await client.rpc('employee_shared_stock', {
+        p_hash: hash,
+        ...(saving && { p_request: body.id, p_report: body.report_id, p_version: body.version,
+          p_date: body.date, p_changes: body.changes, p_note: body.notes }),
       })
       if (error?.message === 'invalid session') throw new Failure(401, 'Sesi berakhir. Masuk kembali.')
-      if (error?.message === 'so stale form') throw new Failure(409, 'Tanggal atau daftar barang berubah. Muat ulang form dan periksa isian.')
-      if (error?.code === '23505') throw new Failure(409, 'Anda sudah mengirim SO di toko ini hari ini. Muat ulang untuk membuka laporan.')
-      if (error?.message === 'so invalid value') throw new Failure(400, 'Periksa kelengkapan dan format jumlah stok.')
-      if (error?.message === 'so missing report' || error?.message === 'so duplicate') throw new Failure(404, 'Laporan tidak tersedia.')
-      if (error || !data) throw new Failure(503, 'Layanan SO belum tersedia. Coba lagi.')
+      if (error?.message === 'so item conflict' || error?.message === 'so stale form') {
+        return respond({ code: 'STOCK_CONFLICT', error: 'SO sudah diperbarui. Muat ulang untuk membandingkan isian.' }, 409)
+      }
+      if (error?.message === 'so invalid value' || error?.message === 'so no changes' || error?.code === '22008') {
+        throw new Failure(400, 'Periksa format jumlah dan perubahan stok.')
+      }
+      if (error || !data) {
+        console.error('Shared SO RPC failed', error?.code)
+        throw new Failure(503, 'Hasil penyimpanan belum dikonfirmasi. Coba lagi.')
+      }
       return respond(data)
+    }
+    if (['stock_form', 'stock_save', 'stock_receipt'].includes(body.operation)) {
+      throw new Failure(409, 'SO sudah diperbarui. Muat ulang halaman untuk memakai SO bersama.')
     }
     if (body.operation === 'requests' || body.operation === 'request_attendance') {
       if (body.operation === 'requests') return respond({ requests: await rpc('employee_attendance_requests', { p_hash: hash }) })

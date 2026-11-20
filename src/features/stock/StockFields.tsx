@@ -2,37 +2,21 @@ import { useEffect, useState } from 'react'
 import { Notice } from '../../components/ui/shared'
 import { displayStockQuantity, groupStockItems, statusLabels, whatsappStock } from './model'
 import type { Quantity, StockItem, StockReceipt } from './model'
+import { displayTime } from '../attendance/dates'
 import './stock.css'
 
-export function StockInput({ item, value, onChange, invalid = false }: {
-  item: Pick<StockItem, 'name' | 'unit_type' | 'unit_label'>
-  value: Quantity; onChange: (value: Quantity) => void; invalid?: boolean
-}) {
-  const combined = item.unit_type === 'combined'
-  return <div className="stock-input">
-    <div className="stock-row"><strong>{item.name}</strong><span className="stock-badge">{item.unit_label}</span></div>
-    <div className={combined ? 'stock-pair' : ''}>
-      <label className="field"><span>{combined ? 'Kardus' : 'Jumlah'}</span>
-        <input type="text" autoComplete="off" maxLength={24} aria-label={item.name + (combined ? ' dalam kardus' : ' dalam ' + item.unit_label)}
-          aria-invalid={invalid} value={value[0]} placeholder={combined ? '0' : 'Contoh 1.400'} onChange={e => onChange([e.target.value, value[1]])} />
-      </label>
-      {combined && <label className="field"><span>Pcs</span>
-        <input type="text" autoComplete="off" maxLength={24} aria-label={item.name + ' dalam pcs'} aria-invalid={invalid}
-          value={value[1]} placeholder="0" onChange={e => onChange([value[0], e.target.value])} />
-      </label>}
-    </div>
-    {invalid && <small className="stock-invalid">Periksa jumlah. {combined ? 'Isi kedua kolom dengan bilangan bulat atau tanda -.' : 'Gunakan angka, pecahan, atau tanda -.'}</small>}
-  </div>
-}
-
-export function CompactStockInput({ item, value, onChange, invalid }: {
-  item: StockItem; value: Quantity; onChange: (value: Quantity) => void; invalid: boolean
+export function CompactStockInput({ item, value, onChange, invalid, credit }: {
+  item: StockItem; value: Quantity; onChange: (value: Quantity) => void; invalid: boolean; credit?: string | null
 }) {
   const combined = item.unit_type === 'combined'
   return <div className={'stock-compact-row' + (combined ? ' stock-compact-combined' : '')}>
     <div className="stock-compact-name"><strong>{item.name}</strong>
       {!combined && <small className="muted">{item.unit_label}</small>}
+      {credit && <small className="muted">Terakhir: {credit}</small>}
     </div>
+    {invalid && <small className="stock-invalid stock-item-error" role="alert">
+      {combined ? 'Isi kedua kolom dengan bilangan bulat atau tanda -.' : 'Gunakan angka, pecahan, atau tanda -.'}
+    </small>}
     <div className={'stock-compact-values' + (combined ? ' stock-pair' : '')}>
       <label>
         <input type="text" autoComplete="off" maxLength={24} aria-label={item.name + ' dalam ' + (combined ? 'kardus' : item.unit_label)}
@@ -59,6 +43,9 @@ export function StockSummary({ receipt }: { receipt: StockReceipt }) {
             <strong>{displayStockQuantity(item)}</strong>
             {(item.status_flag === 'empty' || item.status_flag === 'low') &&
               <span className={'stock-badge stock-' + item.status_flag}>{statusLabels[item.status_flag]}</span>}
+            {item.last_editor && item.last_edit_at && <small className="muted stock-item-credit">
+              {item.last_editor} · {displayTime(item.last_edit_at)} WIB
+            </small>}
           </div>
         </div>)}
       </section>)}
@@ -66,12 +53,12 @@ export function StockSummary({ receipt }: { receipt: StockReceipt }) {
   </div>
 }
 
-export function CopyStock({ receipt }: { receipt: StockReceipt }) {
+export function CopyStock({ stock }: { stock: Parameters<typeof whatsappStock>[0] }) {
   const [message, setMessage] = useState('')
   const [showText, setShowText] = useState(false)
   async function copy() {
     try {
-      await navigator.clipboard.writeText(whatsappStock(receipt))
+      await navigator.clipboard.writeText(whatsappStock(stock))
       setShowText(false)
       setMessage('Format WhatsApp sudah disalin.')
     } catch {
@@ -83,7 +70,7 @@ export function CopyStock({ receipt }: { receipt: StockReceipt }) {
   return <div className="stack">
     <button className="button button-secondary" type="button" onClick={() => void copy()}>Salin Format WhatsApp</button>
     {message && <Notice tone={showText ? 'warning' : 'success'}>{message}</Notice>}
-    {showText && <textarea aria-label="Format WhatsApp" readOnly rows={9} value={whatsappStock(receipt)} onFocus={e => e.target.select()} />}
+    {showText && <textarea aria-label="Format WhatsApp" readOnly rows={9} value={whatsappStock(stock)} onFocus={e => e.target.select()} />}
   </div>
 }
 

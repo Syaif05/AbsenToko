@@ -5,6 +5,7 @@ export const demoMode = import.meta.env.VITE_ATTENDANCE_MODE === 'demo'
 export type Account = { employee: Employee; token?: string; expiresAt?: number }
 export type Session = Account & { status: AttendanceStatus }
 export class SessionEnded extends Error {}
+export class StockConflict extends Error {}
 const tokenPattern = /^[0-9a-f]{64}$/
 export const savedAccountKey = 'absentoko:employee-device:' + import.meta.env.VITE_SUPABASE_URL?.trim()
 
@@ -54,6 +55,7 @@ async function call<T>(operation: string, fields = {}, token?: string): Promise<
   const result = await response.json().catch(() => null)
   if (!response.ok || !result) {
     if (token && response.status === 401) throw new SessionEnded('Sesi berakhir. Pilih toko dan nama kembali.')
+    if (response.status === 409 && result?.code === 'STOCK_CONFLICT') throw new StockConflict(result.error)
     throw new Error(typeof result?.error === 'string' ? result.error : 'Layanan absensi belum tersedia.')
   }
   return result as T
@@ -161,7 +163,7 @@ export async function employeeRequests(account: Account, fields?: { id: string; 
   return (await call<{ requests: import('./requests').AttendanceRequest[] }>(fields ? 'request_attendance' : 'requests', fields ?? {}, account.token)).requests
 }
 
-export async function employeeStock<T>(account: Account, operation: 'stock_form' | 'stock_save' | 'stock_receipt', fields = {}) {
+export async function employeeStock<T>(account: Account, operation: 'stock_shared_form' | 'stock_shared_save', fields = {}) {
   if (demoMode) throw new Error('Stock Opname memerlukan koneksi ke database toko.')
   if (!account.token) throw new SessionEnded('Sesi berakhir. Pilih toko dan nama kembali.')
   return call<T>(operation, fields, account.token)

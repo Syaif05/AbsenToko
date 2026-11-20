@@ -52,15 +52,16 @@ test('revoked schedule session returns 401 without database details', async () =
 test('stock submission binds identity to session and rejects malformed values', async () => {
   const { invoke, calls } = await endpoint()
   const body = {
-    operation: 'stock_save', id: '10000000-0000-4000-8000-000000000001',
-    version: 'a'.repeat(32), date: '2026-11-20', values: { item: ['1.400', ''] }, notes: 'Cek',
+    operation: 'stock_shared_save', report_id: null, id: '10000000-0000-4000-8000-000000000001',
+    version: 'a'.repeat(32), date: '2026-11-20', changes: { item: { values: ['1.400', ''], revision: 0 } }, notes: 'Cek',
     employee_id: 'other', store_id: 'other',
   }
   assert.equal((await invoke(body, '')).status, 401)
-  assert.equal((await invoke({ ...body, values: [] })).status, 400)
+  assert.equal((await invoke({ ...body, changes: [] })).status, 400)
   assert.equal((await invoke(body)).status, 200)
-  const forwarded = calls.filter(call => call.name === 'employee_stock_opname')
+  assert.equal((await invoke({ ...body, operation: 'stock_save' })).status, 409)
+  const forwarded = calls.filter(call => call.name === 'employee_shared_stock')
   assert.equal(forwarded.length, 1)
-  assert.deepEqual(Object.keys(forwarded[0].args).sort(), ['p_date', 'p_hash', 'p_id', 'p_notes', 'p_values', 'p_version'])
+  assert.deepEqual(Object.keys(forwarded[0].args).sort(), ['p_changes', 'p_date', 'p_hash', 'p_note', 'p_report', 'p_request', 'p_version'])
   assert.notEqual(forwarded[0].args.p_hash, 'a'.repeat(64))
 })

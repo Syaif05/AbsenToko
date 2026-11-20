@@ -196,17 +196,24 @@ Tabel `attendance_requests` memakai RLS khusus baca Owner; karyawan memakai RPC 
 
 ## Stock Opname
 
-Untuk rilis SO, jalankan migrasi `20261120141942_stock_opname.sql`, lalu deploy ulang
-`attendance-api` dan `owner-api` sebelum menerbitkan frontend. Keduanya memakai
-konfigurasi sesi dan origin yang sudah ada.
+Untuk rilis SO bersama, jalankan migrasi `20261120141942_stock_opname.sql` dan
+`20261120153000_shared_stock_opname.sql` sesuai urutan riwayat proyek. Deploy ulang
+`attendance-api` dan terbitkan frontend dalam jendela rilis yang sama. Klien SO
+versi lama akan diminta memuat ulang halaman. Konfigurasi sesi dan origin tetap digunakan.
 
 Katalog awal 42 barang dan aturan pengisian berlaku untuk semua toko. Nama toko
-diambil dari penempatan karyawan lalu disimpan bersama laporan. Setiap karyawan
-dapat menyimpan satu laporan per toko per tanggal WIB. Hanya Owner yang dapat
-mengoreksi atau menghapus laporan. Menonaktifkan atau menghapus barang dari
-master tidak mengubah nama, kategori, dan satuan dalam laporan lama.
+diambil dari penempatan karyawan. Simpan pertama membuat satu SO bersama per
+toko per tanggal WIB dan mengambil snapshot katalog untuk hari itu. Karyawan
+aktif di toko tersebut dapat menyimpan sebagian dan memperbarui isian hari ini.
+Perubahan item yang sama perlu ditinjau ulang jika revisinya sudah berbeda.
+Nama kontributor berasal dari sesi pilih nama dan belum memverifikasi identitas pribadi.
+Owner dapat melihat pengisi, atribusi per item, dan riwayat perubahan, serta
+mengoreksi atau menghapus laporan. Laporan individu yang lebih lama tetap bisa
+dibuka sebagai histori dan tidak digabung otomatis. Perubahan master berlaku
+untuk SO berikutnya tanpa mengubah snapshot laporan yang sudah ada.
 Untuk menghapus kategori, kosongkan dulu kategori tersebut dengan memindahkan
 atau menghapus barangnya. Ekspor mengikuti filter tanggal dan nama yang diterapkan.
 
-Gunakan `supabase/tests/stock_opname.sql` di database uji dengan satu Owner yang
-sudah diprovisikan. Tes memakai transaksi yang diakhiri dengan rollback.
+Jalankan `supabase/tests/stock_opname.sql` dan `supabase/tests/shared_stock_opname.sql`
+di database uji dengan satu Owner yang sudah diprovisikan. Tes menggunakan transaksi
+yang diakhiri dengan rollback.

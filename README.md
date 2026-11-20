@@ -60,3 +60,11 @@ Ikuti [panduan rilis](RELEASE.md) untuk migrasi retensi teknis, pemeriksaan stag
 Pada Ringkasan Owner, **Laporan periode** menyediakan rentang harian, minggu Senin–Minggu, bulan, tahun, atau tanggal bebas (maksimal 366 hari). Pilih toko/karyawan, tekan **Siapkan laporan**, lalu unduh Excel, CSV, JSON, atau cetak/simpan PDF. Laporan periode berisi catatan aktual; unduhan harian pada daftar tetap mengikuti filter dan menyertakan status belum masuk. Durasi tercatat merupakan selisih waktu masuk–pulang, bukan jam payroll. Data diambil per 500 catatan dan unduhan gagal secara jelas jika salah satu halaman gagal.
 
 Foto pada detail absensi ditampilkan utuh dan dapat diketuk untuk memperbesar. Gambar privat hanya diminta saat detail dibuka. Navigasi Owner mempertahankan kerangka halaman selama pemuatan; error tampilan menyediakan tombol muat ulang.
+
+## Stock Opname (SO) bersama
+
+Karyawan yang aktif di toko yang sama mengisi satu laporan SO bersama per toko dan tanggal WIB. Setiap orang dapat menyimpan sebagian barang lalu rekan berikutnya melanjutkan sisanya. Form menampilkan jumlah barang tersimpan, nama pengisi terakhir tiap barang, pencarian barang, serta draf lokal saat halaman dimuat ulang. Jika barang yang sama berubah di perangkat lain, periksa kedua isian sebelum menyimpan ulang.
+
+Owner membuka **Manajemen & Laporan SO** untuk melihat progres, semua nama pengisi, riwayat perubahan, dan detail per barang. Owner dapat mengoreksi laporan serta mengunduh Excel atau CSV sesuai filter yang diterapkan. Laporan SO individu sebelum pembaruan tetap tampil sebagai histori terpisah. Nama pengisi mengikuti sesi pemilihan nama karyawan yang berlaku di aplikasi.
+
+Sebelum menerbitkan frontend pembaruan ini, terapkan migrasi `supabase/migrations/20261120153000_shared_stock_opname.sql` setelah migrasi SO sebelumnya dan deploy ulang Edge Function `attendance-api`. Urutan rilis dan tes SQL dijelaskan dalam [panduan Supabase](supabase/README.md#stock-opname). Uji lokal dengan `npm run lint`, `npm run typecheck`, `npm test`, dan `npm run build`.

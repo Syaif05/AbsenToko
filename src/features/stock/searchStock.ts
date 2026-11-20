@@ -36,7 +36,7 @@ function wordScore(term: string, word: string) {
   return edits <= tolerance ? 5 - edits : 0
 }
 
-export function searchStock(items: StockItem[], input: string) {
+export function searchStock<T extends StockItem>(items: T[], input: string) {
   const query = normalize(input)
   if (!query) return []
   const terms = query.split(' ')
