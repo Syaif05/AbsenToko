@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { Dialog } from '../../components/ui/Dialog'
 import { Loading, Notice, errorMessage } from '../../components/ui/shared'
 import { StockToast } from './StockFields'
-import { validStockValue } from './model'
 import type { Category, MasterItem, StockSettings } from './model'
 import { stockMaster, writeStockMaster, writeStockSettings } from './ownerStock'
 
@@ -68,7 +67,6 @@ export default function StockMaster() {
 
 function SettingsForm({ settings, onSaved }: { settings: StockSettings; onSaved: (message: string) => void }) {
   const [guidelines, setGuidelines] = useState(settings.guidelines_text)
-  const [presets, setPresets] = useState(settings.quick_presets.join(', '))
   const [required, setRequired] = useState(settings.require_all_fields)
   const [busy, setBusy] = useState(false)
   const [feedback, setFeedback] = useState<{ text: string; ok: boolean }>()
@@ -77,16 +75,15 @@ function SettingsForm({ settings, onSaved }: { settings: StockSettings; onSaved:
   return <form className="panel stack" onSubmit={async event => {
     event.preventDefault()
     if (lock.current) return
-    const quick = presets.trim() ? [...new Set(presets.split(',').map(value => value.trim()))] : []
-    if (!guidelines.trim() || quick.length > 12 || quick.some(value => !validStockValue(value))) {
-      setFeedback({ text: 'Isi panduan dan gunakan maksimal 12 isian cepat yang valid, dipisahkan koma.', ok: false })
+    if (!guidelines.trim()) {
+      setFeedback({ text: 'Isi catatan untuk format WhatsApp.', ok: false })
       return
     }
     lock.current = true
     setBusy(true)
     setFeedback(undefined)
     try {
-      await writeStockSettings({ guidelines_text: guidelines.trim(), quick_presets: quick, require_all_fields: required })
+      await writeStockSettings({ guidelines_text: guidelines.trim(), require_all_fields: required })
       setFeedback({ text: 'Aturan pengisian tersimpan.', ok: true })
       onSaved('')
     } catch (cause) {
@@ -98,10 +95,8 @@ function SettingsForm({ settings, onSaved }: { settings: StockSettings; onSaved:
   }}>
     <h2>Aturan pengisian</h2>
     <fieldset className="stack stock-fieldset" disabled={busy}>
-      <label className="field">Panduan karyawan<textarea required maxLength={2000} rows={5}
+      <label className="field">Catatan untuk format WhatsApp<textarea required maxLength={2000} rows={5}
         value={guidelines} onChange={e => setGuidelines(e.target.value)} /></label>
-      <label className="field">Isi cepat, pisahkan dengan koma<input maxLength={320} placeholder="-, 1/4, 1/2, 1, 2"
-        value={presets} onChange={e => setPresets(e.target.value)} /></label>
       <label className="remember-account"><input type="checkbox" checked={required} onChange={e => setRequired(e.target.checked)} /> Wajib mengisi semua barang</label>
       {feedback && (feedback.ok ? <StockToast message={feedback.text} /> : <Notice tone="error">{feedback.text}</Notice>)}
       <button className="button button-primary" type="submit">{busy ? 'Menyimpan…' : 'Simpan aturan'}</button>

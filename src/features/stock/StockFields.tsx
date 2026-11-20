@@ -4,9 +4,9 @@ import { displayStockQuantity, groupStockItems, statusLabels, whatsappStock } fr
 import type { Quantity, StockItem, StockReceipt } from './model'
 import './stock.css'
 
-export function StockInput({ item, value, onChange, presets = [], invalid = false }: {
+export function StockInput({ item, value, onChange, invalid = false }: {
   item: Pick<StockItem, 'name' | 'unit_type' | 'unit_label'>
-  value: Quantity; onChange: (value: Quantity) => void; presets?: string[]; invalid?: boolean
+  value: Quantity; onChange: (value: Quantity) => void; invalid?: boolean
 }) {
   const combined = item.unit_type === 'combined'
   return <div className="stock-input">
@@ -21,12 +21,30 @@ export function StockInput({ item, value, onChange, presets = [], invalid = fals
           value={value[1]} placeholder="0" onChange={e => onChange([value[0], e.target.value])} />
       </label>}
     </div>
-    {presets.length > 0 && <div className="stock-actions" role="group" aria-label={'Isian cepat ' + item.name}>
-      {[...new Set(presets)].map(preset => <button className="button button-secondary stock-preset" key={preset} type="button"
-        aria-pressed={value[0] === preset && (!combined || value[1] === (preset === '-' ? '-' : '0'))}
-        onClick={() => onChange([preset, combined ? (preset === '-' ? '-' : value[1] === '-' ? '0' : value[1] || '0') : ''])}>{preset}</button>)}
-    </div>}
     {invalid && <small className="stock-invalid">Periksa jumlah. {combined ? 'Isi kedua kolom dengan bilangan bulat atau tanda -.' : 'Gunakan angka, pecahan, atau tanda -.'}</small>}
+  </div>
+}
+
+export function CompactStockInput({ item, value, onChange, invalid }: {
+  item: StockItem; value: Quantity; onChange: (value: Quantity) => void; invalid: boolean
+}) {
+  const combined = item.unit_type === 'combined'
+  return <div className={'stock-compact-row' + (combined ? ' stock-compact-combined' : '')}>
+    <div className="stock-compact-name"><strong>{item.name}</strong>
+      {!combined && <small className="muted">{item.unit_label}</small>}
+    </div>
+    <div className={'stock-compact-values' + (combined ? ' stock-pair' : '')}>
+      <label>
+        <input type="text" autoComplete="off" maxLength={24} aria-label={item.name + ' dalam ' + (combined ? 'kardus' : item.unit_label)}
+          aria-invalid={invalid} value={value[0]} placeholder="—" onChange={e => onChange([e.target.value, value[1]])} />
+        {combined && <small className="muted">kardus</small>}
+      </label>
+      {combined && <label>
+        <input type="text" autoComplete="off" maxLength={24} aria-label={item.name + ' dalam pcs'} aria-invalid={invalid}
+          value={value[1]} placeholder="—" onChange={e => onChange([value[0], e.target.value])} />
+        <small className="muted">pcs</small>
+      </label>}
+    </div>
   </div>
 }
 

@@ -5,7 +5,7 @@ export type Values = Record<string, Quantity>
 export type Category = { id: string; name: string; sort_order: number; is_active: boolean }
 export type MasterItem = Category & { category_id: string; unit_label: string; unit_type: 'single' | 'combined' }
 export type StockItem = Pick<MasterItem, 'id' | 'name' | 'category_id' | 'unit_type' | 'unit_label'> & { category_name: string }
-export type StockSettings = { guidelines_text: string; quick_presets: string[]; require_all_fields: boolean }
+export type StockSettings = { guidelines_text: string; require_all_fields: boolean }
 export type StockForm = {
   employee_name: string; store_name: string; report_date: string; version: string
   existing_id: string | null; settings: StockSettings; items: StockItem[]
@@ -23,7 +23,7 @@ export type StockReceipt = { report: StockReport; items: ReportItem[] }
 
 export const statusLabels = { empty: 'Stok habis', low: 'Menipis', ok: 'Tercatat', unfilled: 'Belum diisi' }
 const integer = /^(?:-|[0-9]{1,12}|[0-9]{1,3}(?:\.[0-9]{3}){1,3})$/
-export const validStockValue = (value: string) => integer.test(value) || /^[0-9]{1,6}\/[1-9][0-9]{0,5}$/.test(value)
+const validStockValue = (value: string) => integer.test(value) || /^[0-9]{1,6}\/[1-9][0-9]{0,5}$/.test(value)
 
 export function validQuantity([main, extra]: Quantity, combined: boolean, required: boolean) {
   main = main.trim()

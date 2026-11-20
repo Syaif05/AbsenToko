@@ -67,7 +67,7 @@ export async function stockMaster(signal: AbortSignal) {
   const [categories, items, settings] = await Promise.all([
     readCatalog<Category>('so_categories'),
     readCatalog<MasterItem>('so_items'),
-    db.from('so_settings').select('guidelines_text,quick_presets,require_all_fields')
+    db.from('so_settings').select('guidelines_text,require_all_fields')
       .eq('id', 1).abortSignal(signal).returns<StockSettings[]>().single(),
   ])
   if (settings.error) throw new Error('Pengaturan Stock Opname gagal dimuat.')
@@ -87,5 +87,5 @@ export async function writeStockMaster(table: 'so_categories' | 'so_items', id: 
 export async function writeStockSettings(settings: StockSettings) {
   const { data, error } = await client().from('so_settings').update(settings).eq('id', 1)
     .select('id').abortSignal(AbortSignal.timeout(20_000)).single()
-  if (error || !data) throw new Error('Aturan belum tersimpan. Periksa panduan dan isian cepat.')
+  if (error || !data) throw new Error('Aturan belum tersimpan. Periksa catatan dan coba lagi.')
 }
