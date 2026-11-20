@@ -196,7 +196,7 @@ Tabel `attendance_requests` memakai RLS khusus baca Owner; karyawan memakai RPC 
 
 ## Stock Opname
 
-Untuk rilis SO, jalankan migrasi `20261120135851_stock_opname.sql`, lalu deploy ulang
+Untuk rilis SO, jalankan migrasi `20261120141942_stock_opname.sql`, lalu deploy ulang
 `attendance-api` dan `owner-api` sebelum menerbitkan frontend. Keduanya memakai
 konfigurasi sesi dan origin yang sudah ada.
 
