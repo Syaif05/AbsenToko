@@ -25,7 +25,7 @@ async function readBody(request: Request) {
     const chunk = await reader.read()
     if (chunk.done) break
     size += chunk.value.byteLength
-    if (size > 4096) {
+    if (size > 25_000) {
       await reader.cancel()
       throw new Error('body too large')
     }
@@ -81,6 +81,23 @@ Deno.serve(async (request) => {
     if (limit.error) return respond({ error: 'Layanan belum tersedia.' }, 503)
     if (!limit.data)
       return respond({ error: 'Terlalu banyak permintaan. Coba lagi sebentar.' }, 429)
+
+    if (operation === 'stock_edit' || operation === 'stock_delete') {
+      const deleting = operation === 'stock_delete'
+      if (typeof body.version !== 'string' || !Number.isFinite(Date.parse(body.version))
+        || (!deleting && (typeof body.notes !== 'string' || body.notes.length > 500
+          || !body.values || typeof body.values !== 'object' || Array.isArray(body.values)))) {
+        return respond({ error: 'Periksa isian laporan.' }, 400)
+      }
+      const result = await admin.rpc('owner_update_stock_opname', {
+        p_owner: user.id, p_id: id, p_version: body.version, p_delete: deleting,
+        p_values: deleting ? null : body.values, p_notes: deleting ? null : body.notes,
+      })
+      if (result.error?.message === 'so invalid value') return respond({ error: 'Periksa format jumlah stok.' }, 400)
+      if (result.error?.message === 'so stale report') return respond({ error: 'Laporan sudah berubah. Buka kembali untuk melihat data terbaru.' }, 409)
+      if (result.error || result.data?.ok !== true) return respond({ error: 'Perubahan belum dikonfirmasi. Muat ulang laporan.' }, 503)
+      return respond({ ok: true })
+    }
 
     if (operation === 'review_request') {
       if (typeof body.approve !== 'boolean' || typeof body.note !== 'string' || body.note.trim().length<5 || body.note.length>500) return respond({error:'Isi catatan keputusan 5–500 karakter.'},400)

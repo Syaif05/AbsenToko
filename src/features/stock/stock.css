@@ -1,0 +1,42 @@
+.sheet.stock-dialog { max-width: 44rem; width: min(100% - 1rem, 44rem); overflow-wrap: anywhere; }
+.stock-fieldset { border: 0; min-width: 0; margin: 0; padding: 0; }
+.stock-refresh { margin-inline-start: auto; min-width: 44px; font-size: 1.45rem; }
+.stock-guide, .stock-group, .stock-input { border: 1px solid var(--border, #bbb); border-radius: .85rem; padding: .8rem; }
+.stock-guide { background: var(--paper, transparent); }
+.stock-group > summary, .stock-guide > summary { cursor: pointer; font-weight: 700; min-height: 44px; padding-block: .5rem; }
+.stock-input { display: grid; gap: .55rem; }
+.stock-row, .stock-actions { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .55rem; }
+.stock-actions { justify-content: flex-start; }
+.stock-preset { min-inline-size: 44px; min-block-size: 44px; }
+.stock-preset[aria-pressed="true"] { outline: 2px solid currentColor; outline-offset: -3px; }
+.stock-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; }
+.stock-badge { display: inline-block; border: 1px solid currentColor; border-radius: 6px; padding: .12rem .4rem; font-size: .825rem; }
+.stock-empty, .stock-invalid { background: #fde4e2; color: #8d2017; }
+.stock-low { background: #fff0c2; color: #704300; }
+.stock-invalid { padding: .4rem; border-radius: .4rem; }
+.stock-result { padding-block: .4rem; border-block-end: 1px solid var(--border, #bbb); }
+.stock-quantity { display: flex; align-items: center; flex-wrap: wrap; gap: .45rem; }
+.stock-lines { white-space: pre-wrap; }
+.stock-filter { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); gap: .75rem; }
+.stock-list { display: grid; gap: .6rem; }
+.stock-list > button { text-align: start; justify-content: flex-start; white-space: normal; }
+.account-heading > div { min-width: 0; overflow-wrap: anywhere; }
+.stock-refresh { flex: none; }
+.stock-input input, .stock-dialog textarea { min-width: 0; width: 100%; box-sizing: border-box; }
+
+.stock-toast {
+  position: fixed;
+  inset: auto max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) auto;
+  z-index: 40;
+  display: flex;
+  gap: .4rem;
+  align-items: center;
+  max-width: calc(100% - 2rem);
+  padding: .4rem;
+  border-radius: .75rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 4px 18px #0002;
+}
+.stock-toast { pointer-events: none; }
+.stock-toast button { pointer-events: auto; }

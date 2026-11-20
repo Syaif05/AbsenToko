@@ -10,6 +10,7 @@ const links = [
   ['/owner/karyawan', 'Karyawan', '♙'],
   ['/owner/toko', 'Toko', '⌂'],
   ['/owner/jadwal', 'Jadwal', '▦'],
+  ['/owner/stock-opname', 'Manajemen & Laporan SO', '▤'],
   ['/owner/pengaturan', 'Pengaturan', '⚙'],
 ]
 

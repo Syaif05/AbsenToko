@@ -9,6 +9,7 @@ import OwnerLayout from './OwnerLayout'
 
 const OwnerDirectoryPage = lazy(() => import('../../pages/OwnerDirectoryPage'))
 const OwnerSchedulePage = lazy(() => import('../../pages/OwnerSchedulePage'))
+const OwnerStockPage = lazy(() => import('../../pages/OwnerStockPage'))
 const OwnerSettingsPage = lazy(() => import('../../pages/OwnerSettingsPage'))
 
 export default function OwnerRoutes() {
@@ -91,6 +92,7 @@ export default function OwnerRoutes() {
         <Route path="karyawan" element={<OwnerDirectoryPage key="employees" mode="employees" />} />
         <Route path="toko" element={<OwnerDirectoryPage key="stores" mode="stores" />} />
         <Route path="jadwal" element={<OwnerSchedulePage />} />
+        <Route path="stock-opname" element={<OwnerStockPage />} />
         <Route path="pengaturan" element={<OwnerSettingsPage />} />
       </Route>
       <Route

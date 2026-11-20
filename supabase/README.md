@@ -193,3 +193,20 @@ Karyawan dapat mengajukan tanggal kerja kemarin sampai tujuh hari sebelumnya, un
 Owner melihat antrean maksimal 100 pengajuan tertua dan wajib memberi catatan untuk menyetujui/menolak. Persetujuan memeriksa ulang catatan dan benturan waktu, serta mencatat UID Owner, waktu keputusan, dan alasan. Penolakan tidak mengubah attendance. SHIFT disetujui sebagai catatan manual yang lengkap, tanpa foto/GPS buatan; OUT menggunakan transaksi konfirmasi pulang yang diaudit. Perpindahan toko saat SHIFT pending memerlukan penolakan/pengajuan ulang. Tidak ada pengubahan catatan yang sudah lengkap.
 
 Tabel `attendance_requests` memakai RLS khusus baca Owner; karyawan memakai RPC backend yang mengikat identitas ke sesi, bukan ID dari browser. Jalankan migrasi lalu deploy attendance-api dan owner-api sebelum frontend. Uji `supabase/tests/attendance_requests.sql` mencakup pending, replay, penolakan, persetujuan SHIFT/OUT, otorisasi, dan integritas bukti.
+
+## Stock Opname
+
+Untuk rilis SO, jalankan migrasi `20261120135851_stock_opname.sql`, lalu deploy ulang
+`attendance-api` dan `owner-api` sebelum menerbitkan frontend. Keduanya memakai
+konfigurasi sesi dan origin yang sudah ada.
+
+Katalog awal 42 barang dan aturan pengisian berlaku untuk semua toko. Nama toko
+diambil dari penempatan karyawan lalu disimpan bersama laporan. Setiap karyawan
+dapat menyimpan satu laporan per toko per tanggal WIB. Hanya Owner yang dapat
+mengoreksi atau menghapus laporan. Menonaktifkan atau menghapus barang dari
+master tidak mengubah nama, kategori, dan satuan dalam laporan lama.
+Untuk menghapus kategori, kosongkan dulu kategori tersebut dengan memindahkan
+atau menghapus barangnya. Ekspor mengikuti filter tanggal dan nama yang diterapkan.
+
+Gunakan `supabase/tests/stock_opname.sql` di database uji dengan satu Owner yang
+sudah diprovisikan. Tes memakai transaksi yang diakhiri dengan rollback.

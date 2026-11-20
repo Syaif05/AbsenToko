@@ -160,3 +160,9 @@ export async function employeeRequests(account: Account, fields?: { id: string; 
   if (demoMode) throw new Error('Pengajuan tersedia pada aplikasi terhubung, bukan mode demo.')
   return (await call<{ requests: import('./requests').AttendanceRequest[] }>(fields ? 'request_attendance' : 'requests', fields ?? {}, account.token)).requests
 }
+
+export async function employeeStock<T>(account: Account, operation: 'stock_form' | 'stock_save' | 'stock_receipt', fields = {}) {
+  if (demoMode) throw new Error('Stock Opname memerlukan koneksi ke database toko.')
+  if (!account.token) throw new SessionEnded('Sesi berakhir. Pilih toko dan nama kembali.')
+  return call<T>(operation, fields, account.token)
+}

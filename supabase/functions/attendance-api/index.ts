@@ -137,6 +137,26 @@ Deno.serve(async request => {
     if (!token || !/^[0-9a-f]{64}$/.test(token)) throw new Failure(401, 'Pilih toko dan nama terlebih dahulu.')
     const hash = await digest(encoder.encode(token))
     await limit('session:' + hash, 30, 60)
+    if (body.operation === 'stock_form' || body.operation === 'stock_save' || body.operation === 'stock_receipt') {
+      const saving = body.operation === 'stock_save'
+      if (body.operation !== 'stock_form' && !uuid(body.id)) throw new Failure(400, 'ID laporan tidak valid.')
+      if (saving && (typeof body.version !== 'string' || !/^[a-f0-9]{32}$/.test(body.version)
+        || typeof body.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(body.date)
+        || typeof body.notes !== 'string' || body.notes.length > 500
+        || !body.values || typeof body.values !== 'object' || Array.isArray(body.values)
+        || JSON.stringify(body.values).length > 24000)) throw new Failure(400, 'Periksa isian laporan stok.')
+      const { data, error } = await client.rpc('employee_stock_opname', {
+        p_hash: hash, p_id: body.operation === 'stock_form' ? null : body.id,
+        ...(saving && { p_version: body.version, p_date: body.date, p_values: body.values, p_notes: body.notes }),
+      })
+      if (error?.message === 'invalid session') throw new Failure(401, 'Sesi berakhir. Masuk kembali.')
+      if (error?.message === 'so stale form') throw new Failure(409, 'Tanggal atau daftar barang berubah. Muat ulang form dan periksa isian.')
+      if (error?.code === '23505') throw new Failure(409, 'Anda sudah mengirim SO di toko ini hari ini. Muat ulang untuk membuka laporan.')
+      if (error?.message === 'so invalid value') throw new Failure(400, 'Periksa kelengkapan dan format jumlah stok.')
+      if (error?.message === 'so missing report' || error?.message === 'so duplicate') throw new Failure(404, 'Laporan tidak tersedia.')
+      if (error || !data) throw new Failure(503, 'Layanan SO belum tersedia. Coba lagi.')
+      return respond(data)
+    }
     if (body.operation === 'requests' || body.operation === 'request_attendance') {
       if (body.operation === 'requests') return respond({ requests: await rpc('employee_attendance_requests', { p_hash: hash }) })
       if (!uuid(body.id) || typeof body.date !== 'string' || !/^20\d\d-\d{2}-\d{2}$/.test(body.date) || !['SHIFT','OUT'].includes(body.kind) || typeof body.reason !== 'string' || body.reason.trim().length<5 || body.reason.length>500 || !Number.isFinite(Date.parse(body.checkout)) || (body.kind==='SHIFT' && !Number.isFinite(Date.parse(body.checkin)))) throw new Failure(400,'Lengkapi tanggal, waktu, dan alasan pengajuan.')

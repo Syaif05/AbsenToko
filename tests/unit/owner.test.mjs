@@ -145,3 +145,19 @@ test('request review validates decision and uses authenticated Owner identity', 
  assert.equal((await (await endpoint({nonOwner:true})).invoke(body)).status,403)
  assert.equal((await (await endpoint({rpcResult:{error:{message:'attendance conflict'}}})).invoke(body)).status,409)
 })
+
+test('editing stock reports requires Owner and propagates stale-version conflicts', async () => {
+  const body = {
+    operation: 'stock_edit', id: request.id, version: '2026-11-20T05:00:00Z',
+    values: { line: ['1.400', ''] }, notes: 'Koreksi', owner_id: 'not-the-owner',
+  }
+  const denied = await endpoint({ nonOwner: true })
+  assert.equal((await denied.invoke(body)).status, 403)
+  assert.equal(denied.calls.length, 0)
+  const stale = await endpoint({ rpcResult: { error: { message: 'so stale report' } } })
+  assert.equal((await stale.invoke(body)).status, 409)
+  const write = stale.calls.find(call => call.name === 'owner_update_stock_opname')
+  assert.equal(write.args.p_owner, 'owner')
+  assert.equal(write.args.p_version, body.version)
+  assert.equal(write.args.p_delete, false)
+})

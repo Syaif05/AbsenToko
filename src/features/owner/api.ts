@@ -352,3 +352,6 @@ export async function loadAttendanceRequests(signal: AbortSignal) {
   return data as import('../attendance/requests').AttendanceRequest[]
 }
 export const reviewAttendanceRequest = (id: string, approve: boolean, note: string) => invoke<{ok:boolean}>('review_request',id,{approve,note})
+
+export const changeStockReport = (id: string, version: string, fields?: { values: import('../stock/model').Values; notes: string }) =>
+  invoke<{ ok: true }>(fields ? 'stock_edit' : 'stock_delete', id, { version, ...fields })

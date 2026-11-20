@@ -1,3 +1,4 @@
+import '../features/stock/stock.css'
 import { AttendanceRequests } from '../features/attendance/AttendanceRequests'
 import { EmployeeSchedule } from '../features/attendance/EmployeeSchedule'
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
@@ -17,9 +18,12 @@ import type { Account } from '../features/attendance/api'
 
 const EvidenceForm = lazy(() => import('../features/attendance/EvidenceForm').then(module => ({ default: module.EvidenceForm })))
 
+const EmployeeStock = lazy(() => import('../features/stock/EmployeeStock'))
+
 type Confirmation = { action: Action; at: string; employee: Employee }
 
 export default function AttendancePage() {
+  const [stockOpen, setStockOpen] = useState(false)
   const [stores, setStores] = useState<Store[]>()
   const [storeId, setStoreId] = useState('')
   const [staff, setStaff] = useState<Employee[]>()
@@ -100,6 +104,7 @@ export default function AttendancePage() {
     setStatus(null)
     setAction(null)
     setConfirmation(null)
+    setStockOpen(false)
     setBusy(false)
     setError(message)
   }, [])
@@ -227,6 +232,8 @@ export default function AttendancePage() {
               <div className="account-heading">
                 <span className="avatar" aria-hidden="true">{Array.from(account.employee.name)[0]?.toLocaleUpperCase('id')}</span>
                 <div><p className="panel-kicker">Menu absensi</p><h2 ref={formHeading} tabIndex={-1}>{account.employee.name}</h2></div>
+                <button className="button button-quiet stock-refresh" type="button" title="Perbarui Status" aria-label="Perbarui Status"
+                  disabled={!online || busy} onClick={() => setStatusReload(value => value + 1)}>↻</button>
               </div>
               <p className="muted">{expiry ? 'Sesi berlaku sampai ' + (todayWib(expiry) === todayWib() ? '' : displayDate(todayWib(expiry)) + ', ') + displayTime(expiry.toISOString()) + ' WIB' : ''}</p>
               {accountNotice && <Notice>{accountNotice}</Notice>}
@@ -239,9 +246,12 @@ export default function AttendancePage() {
                 </button>
               )}
               <button className="button button-secondary w-full" type="button" disabled={!online || busy}
-                onClick={() => setStatusReload(value => value + 1)}>Perbarui Status</button>
+                onClick={() => setStockOpen(true)}>Stock Opname (SO)</button>
               <button className="button button-quiet w-full" type="button" disabled={!online || busy} onClick={logout}>Keluar Akun</button>
             </section>
+            {stockOpen && <Suspense fallback={<Loading label="Membuka Stock Opname…" />}>
+              <EmployeeStock account={account} onClose={() => setStockOpen(false)} onSessionEnded={scheduleSessionEnded} />
+            </Suspense>}
             <AttendanceRequests account={account} onSessionEnded={scheduleSessionEnded} />
             <EmployeeSchedule account={account} online={online} onSessionEnded={scheduleSessionEnded} />
             </div>
