@@ -1,219 +1,18 @@
-> **Teh Idaman:** Lihat bagian [Absensi langsung dan pengelolaan data](#absensi-langsung-dan-pengelolaan-data) untuk rilis terbaru. Instruksi PIN di bagian terdahulu hanya berlaku untuk rilis lama.
-
-# Fase 2 Â· Setup Supabase lewat Dashboard
-
-Gunakan proyek Supabase yang disiapkan untuk Absen Toko. Jalankan setiap file SQL **secara utuh** di tab SQL Editor baru dengan role `postgres`. Urutan ini bisa dipakai untuk setup awal atau membuat ulang schema pada proyek Supabase baru.
-
-## 1. Buat schema dan bucket privat
-
-1. Buka proyek yang benar di **Supabase Dashboard â†’ SQL Editor â†’ New query**.
-2. Salin seluruh isi [migrasi schema](migrations/20261111002144_attendance_schema.sql), tempel, lalu klik **Run**. Sukses biasanya tampil sebagai **Success. No rows returned**. Jalankan migrasi ini satu kali per proyek.
-3. Buka **Table Editor â†’ public** dan pastikan tabel `employees`, `attendance`, `attendance_evidence`, dan `owner_profiles` muncul. Buka **Storage** dan pastikan `attendance-photos` berstatus privat. Migrasi membatasi bucket ke JPEG dan 1.000.000 byte per file.
-
-Migrasi berjalan dalam satu transaksi. Jika muncul konflik nama tabel atau policy, periksa objek yang sudah ada sebelum mencoba ulang. Jika bucket sudah ada, migrasi hanya menerimanya bila pengaturan privasi, MIME, dan batas ukurannya sama. Kelola pengaturan bucket dan file melalui Dashboard Storage. [Pembuatan bucket](https://supabase.com/docs/guides/storage/buckets/creating-buckets) Â· [Kebijakan Storage](https://supabase.com/docs/guides/storage/security/access-control)
-
-## 2. Daftarkan akun Owner
-
-1. Buka **Authentication â†’ Users â†’ Add user**. Buat akun dengan email yang Anda kuasai dan kata sandi unik, atau kirim undangan lewat Dashboard. Pastikan email akun sudah terkonfirmasi. Jika membuat akun sendiri lewat Dashboard dan sudah memverifikasi alamat emailnya, gunakan opsi konfirmasi akun yang tersedia.
-2. Salin **User UID** dari detail akun. Di tab SQL Editor baru, tempel isi [skrip provisioning](manual/provision_owner.sql). Ganti UUID nol pada baris `owner_uid constant uuid := ...` dengan UID tadi, pertahankan tanda kutip, lalu klik **Run**. UUID kedua di bawahnya adalah nilai pemeriksaan. Isi skrip hanya memerlukan UID.
-3. Buka pengaturan **Authentication** dan matikan **Allow new users to sign up** serta **Allow anonymous sign-ins**. Pertahankan provider **Email** agar akun Owner dapat masuk dengan email dan kata sandi saat frontend diintegrasikan.
-
-Profil Owner hanya diberikan lewat skrip admin. Menjalankan ulang provisioning untuk UID yang sama aman. [Pengelolaan pengguna Auth](https://supabase.com/docs/guides/auth/users) Â· [Pengaturan Auth](https://supabase.com/docs/guides/auth/general-configuration)
-
-## 3. Jalankan pengujian izin
-
-1. Buka tab SQL Editor baru. Salin seluruh [skrip uji Fase 2](tests/phase2_permissions.sql), lalu klik **Run**.
-2. Cari hasil **LULUS â€” constraint, RLS, izin Owner, dan konfigurasi Storage Fase 2**. Skrip membuat baris fiktif sementara, menguji akses dengan role `anon`, Auth non-Owner, Owner, dan `service_role`, lalu melakukan `ROLLBACK`.
-3. Jika ada error, catat pesan pertamanya beserta nama file yang dijalankan. Jika editor melaporkan transaksi masih gagal, jalankan `ROLLBACK;` sebelum mencoba ulang. Untuk error izin saat membuat policy Storage, pastikan SQL Editor memakai role `postgres` dan proyek memberikan izin pengelolaan policy pada `storage.buckets` serta `storage.objects`.
-
-Tes SQL memeriksa konfigurasi bucket dan aturan akses database. Saat bucket kosong, pemeriksaan objek hanya mencakup aturan dan hasil listing kosong. Pengujian HTTP untuk upload, signed URL, dan validasi isi JPEG mengikuti implementasi backend.
-
-## Catatan untuk integrasi
-
-- Dashboard Owner membaca kolom `id,name,is_active,created_at,updated_at` dari `employees`. Hash PIN hanya tersedia untuk backend tepercaya. Penambahan/edit karyawan dan pemberian signed URL foto akan melewati backend yang memverifikasi profil Owner.
-- `work_date` dihitung database dari `check_in_at` dalam WIB. Fase 3 akan menulis absensi dan bukti dalam satu transaksi, menegakkan batas sesi, serta menangani PIN, idempotensi, dan upload.
-- SQL Editor menerapkan DDL tanpa menambahkan entri riwayat Supabase CLI. Bila nanti beralih ke deployment migrasi lewat CLI, rekonsiliasi riwayat dengan schema yang sudah terpasang sebelum melakukan push.
-
-## Fase 3 Â· Backend absensi
-
-1. Setelah Fase 2 terpasang, jalankan seluruh `migrations/20261111003058_attendance_backend.sql` di SQL Editor. Jalankan `tests/phase3_transactions.sql` dan pastikan hasilnya `LULUS`.
-2. Di Dashboard **Edge Functions â†’ Secrets**, isi `ALLOWED_ORIGINS` dengan daftar origin yang dipisahkan koma, misalnya `http://localhost:5173,https://absensi.example.com`. Buat `RATE_LIMIT_SECRET` acak minimal 32 byte melalui password manager. Environment bawaan Supabase menyediakan `SUPABASE_URL` dan `SUPABASE_SERVICE_ROLE_KEY`.
-3. Untuk memasang Function secara manual dengan Supabase CLI v3, jalankan `supabase functions deploy attendance-api --remote=PROJECT_REF --use-api` dari folder proyek. Ganti `PROJECT_REF` dengan ID proyek tujuan. Konfigurasi `verify_jwt=false` berlaku khusus endpoint karyawan yang memakai sesi PIN. Operasi selain daftar dan verifikasi memeriksa token sesi pada handler.
-4. URL API berbentuk `https://PROJECT_REF.supabase.co/functions/v1/attendance-api`. Semua operasi menggunakan POST JSON. Respons berisi data hanya setelah operasi database sukses. Respons error memakai status HTTP 400/401/403/409/413/429/503.
-
-| Operasi | Isi JSON | Otorisasi |
-| --- | --- | --- |
-| `list` | `{"operation":"list"}` | Publik, rate limited |
-| `verify` | `operation`, `employee_id`, `pin` | PIN karyawan |
-| `status` | `{"operation":"status"}` | `Authorization: Bearer TOKEN` |
-| `prepare` | `operation`, `attempt_id` UUID, `action` IN atau OUT | Token sesi |
-| `logout` | `operation` | Token sesi |
-| `receipt` | `operation`, `attempt_id` UUID | Token sesi |
-| `submit` | `operation`, `attempt_id`, `photo` base64 JPEG tanpa prefix, `latitude`, `longitude`, `accuracy_m` | Token sesi |
-
-Simpan `attempt_id` yang sama saat retry. Jika respons submit hilang, ulangi submit dengan ID tersebut untuk memperoleh hasil commit sebelumnya selama sesi belum kedaluwarsa. Setelah sesi habis, verifikasi PIN lagi untuk membaca status terbaru. PIN dibersihkan setelah verifikasi. Setelah absen, sesi tetap aktif sampai kedaluwarsa atau pengguna keluar.
-
-Pengaturan masa sesi PIN (default 86400 detik setelah migrasi akun) dan batas sesi kerja (awal 86400 detik) berada di `attendance_private.settings`. Hash PIN Argon2id memakai helper `functions/_shared/pin.ts`; helper ini juga akan dipakai manajemen karyawan pada fase berikutnya. Format foto adalah JPEG maksimal 1.000.000 byte, sisi maksimal 2048 piksel dan maksimal 4 megapiksel. Lokasi segar tetap harus diambil oleh klien. Server memberi cap waktu commit.
-
-Cleanup upload gagal tersedia di `scripts/cleanup.ts`. Operator dapat menjalankannya secara terkontrol menggunakan Deno dengan environment server, melalui `deno run --allow-env --allow-net --config supabase/deno.json supabase/scripts/cleanup.ts`. Cleanup memilih maksimal 100 intent tanpa hasil yang sudah kedaluwarsa lebih dari satu jam. Penghapusan Storage dilakukan sebelum pembersihan intent database. Catatan dan foto absensi yang sudah committed mempunyai kebijakan retensi terpisah sesuai persetujuan Owner.
-
-Jalankan `deno task --config supabase/deno.json check` dan `deno task --config supabase/deno.json test` untuk pemeriksaan lokal. Pengujian SQL lokal memakai PostgreSQL dengan simulasi schema Supabase. Uji HTTP menyeluruh pada Edge Runtime, sumber IP gateway, batas CPU Argon2/JPEG, dan gangguan jaringan Storage masih harus dilakukan pada proyek staging sebelum penggunaan operasional. [Autentikasi Edge Functions](https://supabase.com/docs/guides/functions/auth)
-
-## Fase 5 Â· Dashboard Owner
-
-1. Setelah Fase 2 dan 3 terpasang, jalankan [migrasi Owner](migrations/20261111005049_owner_management.sql) di SQL Editor. Jalankan [uji Owner](tests/phase5_owner.sql) dan pastikan hasilnya diawali **LULUS**. Uji memakai data sementara dan melakukan rollback.
-2. Pasang Edge Function dengan Supabase CLI v3 melalui `supabase functions deploy owner-api --remote=PROJECT_REF --use-api`. Gunakan konfigurasi `ALLOWED_ORIGINS` yang juga dipakai Fase 3. Function memvalidasi access token dengan Supabase Auth dan memeriksa `owner_profiles` sebelum setiap operasi. [Dokumentasi validasi sesi](https://supabase.com/docs/reference/javascript/auth-getuser)
-3. Untuk reset kata sandi Owner, tambahkan URL absolut halaman `/owner/reset` di **Authentication â†’ URL Configuration â†’ Redirect URLs**. Contoh lokal `http://localhost:5173/owner/reset`. Buka tautan reset di browser yang sama dengan permintaan awal karena alurnya memakai PKCE. [Dokumentasi reset kata sandi](https://supabase.com/docs/reference/javascript/auth-resetpasswordforemail)
-4. Jalankan frontend dan masuk di `/owner/login`. Uji rekap pada tanggal dengan absensi, buka bukti privat, lalu coba tambah, edit, aktif/nonaktif, dan reset PIN pada karyawan uji. Pastikan akun Auth yang belum diprovisioning sebagai Owner ditolak.
-
-Foto dibuka dari bucket privat melalui URL bertanda tangan yang berlaku 60 detik. PIN karyawan dibuat oleh server dan tampil sekali setelah perubahan berhasil. Audit menyimpan UID Owner, ID karyawan, tindakan, dan waktu. Jika respons pembuatan hilang setelah penyimpanan, perbarui daftar dan reset PIN karyawan yang sudah tercatat.
-
-## Pembaruan akun karyawan
-
-1. Di Supabase **SQL Editor**, jalankan seluruh file [migrasi sesi akun](migrations/20261111051138_employee_account_sessions.sql) setelah migrasi sebelumnya. Untuk memeriksa hasil, jalankan [uji akun karyawan](tests/employee_account_sessions.sql) di staging; data uji di-rollback.
-2. Dari folder proyek terbaru, jalankan perintah berikut, lalu pilih **Yes** saat CLI meminta konfirmasi:
-
-   ```sh
-   npx supabase@3.1.0 functions deploy attendance-api --remote=PROJECT_REF --use-api
-   ```
-
-3. Pastikan Vercel memakai commit terbaru. Uji dengan akun karyawan pada perangkat pribadi: masuk dengan PIN, muat ulang halaman, kirim absen masuk, kembali ke akun, lalu lakukan absen pulang tanpa memasukkan PIN lagi. **Keluar Akun** mencabut sesi; membuka kembali halaman kemudian meminta PIN.
-
-Browser hanya menyimpan token sesi, identitas karyawan, dan waktu kedaluwarsa bila opsi **Tetap masuk di perangkat ini** dicentang. PIN, foto dan lokasi tidak ikut tersimpan. Sesi baru berlaku sampai 24 jam; durasi khusus yang sebelumnya sudah diatur tetap dipertahankan. Pengaturan jendela absen pulang terpisah dari durasi login.
-
-## Pengelompokan toko
-
-1. Jalankan [migrasi toko](migrations/20261111054639_store_groups.sql) di **Supabase â†’ SQL Editor** setelah migrasi sesi akun. Karyawan yang sudah ada masuk ke **Toko Utama**. Riwayat sebelum migrasi tetap terlihat di **Semua toko**, karena toko asalnya belum tercatat.
-2. Deploy ulang kedua Edge Function dari folder proyek terbaru dan pilih **Yes**:
-
-   ```sh
-   npx supabase@3.1.0 functions deploy attendance-api --remote=PROJECT_REF --use-api
-   npx supabase@3.1.0 functions deploy owner-api --remote=PROJECT_REF --use-api
-   ```
-
-3. Gunakan frontend dari commit pembaruan toko. Bila Vercel terhubung ke GitHub dan deploy otomatis, selesaikan langkah Supabase segera agar pilihan toko dapat dimuat.
-4. Di dashboard, buka **Kelola Karyawan â†’ Kelola Toko**. Buat toko, lalu pilih penempatannya saat tambah/edit karyawan. Karyawan tanpa toko belum muncul di pilihan absensi. Pemindahan mencabut sesi lama dan tidak memindahkan riwayat absensi.
-5. Untuk menetapkan PIN, buka **Edit â†’ Ubah PIN** dan isi 6â€“12 angka, atau kosongkan untuk PIN acak. PIN yang dibuat sebelum pembaruan Lihat PIN Aktif hanya tersedia sebagai hash. Ikuti langkah berikut untuk mengaktifkan penyimpanan PIN aktif terenkripsi.
-
-Uji migrasi di staging dengan [uji toko](tests/store_groups.sql). Uji membuat data sementara dan mengembalikannya dengan rollback.
-
-## Lihat dan salin PIN aktif
-
-1. Jalankan [migrasi PIN aktif](migrations/20261111061533_owner_current_pin.sql) di **Supabase â†’ SQL Editor** setelah migrasi toko.
-2. Buat kunci khusus dengan `openssl rand -hex 32`. Simpan hasilnya sebagai `OWNER_PIN_ENCRYPTION_KEY` di **Edge Functions â†’ Secrets**. Simpan cadangan kunci di pengelola rahasia. Mengganti atau kehilangan kunci membuat salinan yang sudah disimpan tidak dapat dibuka.
-3. Deploy ulang `owner-api` dari folder proyek terbaru, lalu deploy frontend. Login karyawan tetap memeriksa hash PIN melalui `attendance-api`.
-
-   ```sh
-   npx supabase@3.1.0 functions deploy owner-api --remote=PROJECT_REF --use-api
-   ```
-4. Di **Kelola Karyawan â†’ Edit**, gunakan **Lihat PIN** dan **Salin Nama dan PIN**. Untuk akun dengan PIN yang dibuat sebelum pembaruan, gunakan **Ubah PIN** satu kali. PIN baru disimpan bersama salinan terenkripsi, dan pembukaannya dicatat di audit Owner.
-
-
-## Aktivasi perangkat dan jadwal
-
-1. Di SQL Editor, jalankan [migrasi Teh Idaman](migrations/20261111115133_idaman_schedule_and_activation.sql) setelah migrasi akun dan toko. Migrasi ini juga mendukung proyek yang melewati migrasi PIN aktif. Setelah commit, sesi lama berakhir dan data PIN lama dihapus. Catatan absensi, toko, dan profil karyawan tetap ada.
-2. Dalam jendela pemeliharaan yang sama, deploy kedua Edge Function dari versi baru. Kode lama masih mengharapkan kolom PIN, jadi jangan pisahkan tahap migrasi dan deployment terlalu lama.
-
-   ```sh
-   npx supabase@3.1.0 functions deploy attendance-api --remote=PROJECT_REF --use-api
-   npx supabase@3.1.0 functions deploy owner-api --remote=PROJECT_REF --use-api
-   ```
-
-3. Deploy frontend versi baru. Buka **Kelola Karyawan â†’ Profil â†’ Buat Tautan Aktivasi**. Kirim secara pribadi. Tautan berlaku 24 jam dan hanya bisa digunakan sekali. Sesi perangkat berlaku 14 hari. Membuat tautan baru, menonaktifkan karyawan, atau memindahkannya ke toko lain mencabut akses lama.
-4. Buka **Jadwal Karyawan**, pilih toko dan bulan, lalu **Unduh Template Excel**. Isi P, M, S, atau O di Excel atau Google Sheets. Jika memakai Sheets, unduh kembali sebagai .xlsx. Unggah, periksa pratinjau, lalu **Simpan Jadwal**. Kode O berarti libur. Sel kosong mempertahankan data yang tersimpan.
-5. Buka **Pengaturan** untuk mengganti nama aplikasi. Default adalah **Teh Idaman**.
-
-Uji konfigurasi menggunakan [SQL aktivasi dan jadwal](tests/idaman_schedule_and_activation.sql) pada staging. SQL uji melakukan rollback.
-
-
-## Absensi langsung dan pengelolaan data
-
-1. Setelah migrasi jadwal dan aktivasi sudah terpasang, jalankan [migrasi absensi langsung](migrations/20261111123220_direct_attendance_and_archives.sql) di SQL Editor.
-2. Deploy ulang Edge Function `attendance-api` dan `owner-api` dari versi kode baru, kemudian deploy frontend versi yang sama.
-3. Uji dari browser tanpa sesi tersimpan. Pilih toko, pilih nama, dan klik **Lanjutkan Absen**. Pilihan hanya mencakup toko dan karyawan aktif.
-4. Di dashboard Owner, buka **Kelola Toko** atau **Kelola Karyawan**. Hapus mengarsipkan data dan mempertahankan jadwal serta riwayat absensi. Pindahkan atau hapus karyawan yang masih terdaftar sebelum menghapus tokonya.
-
-Pemilihan nama tidak memverifikasi identitas. Foto dan lokasi tetap menjadi bukti absensi.
-
-## Pembaruan Owner November 2026
-
-Area Owner memakai navigasi bersama, filter riwayat toko, dan ID permintaan untuk penyimpanan ulang. Login, foto privat, jadwal Excel, serta pengaturan tetap memakai autentikasi dan RLS Supabase.
-
-Urutan pemasangan setelah pengujian staging dan persetujuan produksi
-
-1. Terapkan `20261111142702_owner_reliability.sql` pada skema yang telah memiliki migrasi absensi langsung. Migrasi menambah tabel tanda terima transaksi privat dan RPC `owner_apply_change`. Riwayat migrasi produksi sebelumnya kosong, sehingga periksa skema awal sebelum memakai perintah push seluruh migrasi.
-2. Jalankan `supabase/tests/owner_reliability.sql` di staging. Pengujian membatalkan fixture melalui rollback dan memeriksa replay, konflik payload, kegagalan atomik, serta izin.
-3. Pasang ulang `owner-api`, kemudian frontend. Function baru kompatibel dengan klien lama melalui ID permintaan yang dibuat server. Jaminan retry dengan ID sama memerlukan frontend baru.
-4. Uji memakai akun Owner staging, termasuk login, tambah/edit/arsip, unggah jadwal, dan detail foto. Hasil browser dengan respons simulasi hanya memverifikasi UI dan kontrak respons.
-
-`attendance_private.owner_change_requests` menyimpan ID Owner, target, operasi, hash payload, dan waktu commit. Akses hanya melalui fungsi server. Tanda terima dipertahankan agar pengiriman ulang tetap dikenali. Kebijakan retensinya memerlukan keputusan Owner sebelum cleanup diaktifkan.
-
-Jika rollback aplikasi diperlukan, gunakan kembali frontend dan `owner-api` versi sebelumnya. Tabel dan RPC tambahan dapat tetap ada. Kehadiran karyawan menggunakan API yang sama seperti sebelum pembaruan.
-
-Uji lokal dengan `npm test`, `npm run lint`, dan `npm run build`. Periksa fungsi dengan `deno task --config supabase/deno.json check`.
-
-## Edit jadwal dan hapus toko permanen
-
-Migrasi `20261111144817_owner_schedule_and_store_deletion.sql` menambah penyimpanan satu shift dan memperbarui proses penghapusan toko. Terapkan migrasi, lalu deploy `owner-api` dan frontend.
-
-Klik sel jadwal untuk memilih P, M, S, O, atau mengosongkannya. Template Excel memakai satu tab Jadwal dengan ID karyawan tersembunyi. Template lama untuk toko dan bulan yang sama tetap dapat diimpor. Sel kosong dalam file mempertahankan shift yang sudah tersimpan.
-
-Pindahkan atau arsipkan karyawan yang masih terdaftar sebelum menghapus tokonya. Penghapusan toko juga menghapus jadwal toko tersebut. Absensi dan bukti tetap tersedia di rekap semua toko dengan toko historis belum tercatat.
-
-## Reset data absensi uji
-
-Migrasi `20261111150722_owner_attendance_reset.sql` menambah reset dari **Pengaturan â†’ Reset Data Absensi**. Terapkan migrasi sebelum memasang ulang `owner-api` dan frontend.
-
-Owner harus mengetik `RESET` untuk menghapus seluruh catatan absensi dan bukti terkait. Reset mempertahankan akun, karyawan, toko, jadwal, dan nama aplikasi. Foto dihapus melalui Storage API. Jika penghapusan foto terhenti, ulangi di dialog yang sama untuk memakai tanda terima yang sama. Foto yang masih menunggu pembersihan tetap tercatat di tabel privat sampai Storage mengonfirmasi penghapusan.
-
-## Portal karyawan dan jadwal pribadi
-
-Karyawan memilih toko dan nama, lalu masuk ke menu absensi. Kalender **Jadwal Saya** membaca jadwal Owner per bulan melalui operasi `schedule` pada `attendance-api`. RPC `attendance_my_schedule` hanya dapat dipanggil service role; identitas dan toko diturunkan dari sesi yang masih aktif. Parameter employee/store dari browser tidak digunakan. Jadwal kosong bukan libur; kode O berarti libur. Jadwal tidak mengubah bukti atau status kehadiran aktual. Nama produk tetap Teh Idaman.
-
-Pengujian: `npm test` mencakup validasi endpoint dan `supabase/tests/employee_portal_schedule.sql` mencakup isolasi karyawan, batas bulan, sesi dicabut/kedaluwarsa, karyawan nonaktif, dan izin RPC. Jalankan SQL tersebut pada database pengujian setelah seluruh migrasi; transaksi di-rollback.
-
-## Perbaikan pemeriksaan bukti (13 November 2026)
-
-Migrasi `fix_attendance_intent_session` mengganti fungsi produksi lama yang masih membaca kolom PIN yang sudah dihapus. Regresi `supabase/tests/attendance_commit_current.sql` menjalankan alur pilih karyawan â†’ siapkan bukti â†’ baca intent â†’ masuk â†’ retry â†’ pulang pada skema terkini dalam transaksi rollback. Kamera membatasi penantian izin/video selama 20 detik, menghentikan stream terlambat setelah pembatalan, dan menyediakan pesan untuk mencoba kembali.
-
-## Lupa absen pulang dan konfirmasi Owner
-
-Migrasi `attendance_resolution` mempertahankan catatan tanpa jam pulang. Setelah jendela sesi server (default 24 jam) lewat, status hari baru tidak lagi terblokir. Saat karyawan menyimpan absen masuk baru, sesi lama ditutup secara administratif (`closed_at`) dalam transaksi yang sama; `check_out_at` tetap kosong sampai Owner mengonfirmasi waktu sebenarnya. Sesi yang masih dalam jendela kerja tetap wajib pulang terlebih dahulu. Satu catatan per karyawan per tanggal tetap ditegakkan.
-
-Owner membuka **Absensi belum ditutup** atau detail tanggal lama, mengisi tanggal/jam pulang WIB serta alasan. Server memeriksa peran Owner, urutan waktu, waktu masa depan, batas 48 jam, dan benturan dengan absensi berikutnya. Konfirmasi tidak menciptakan foto atau koordinat. Alasan, UID Owner, waktu konfirmasi, request ID, dan waktu pulang tersimpan; request ulang identik tidak menggandakan audit. Catatan yang sudah selesai tidak dapat ditimpa dari fitur ini. Audit privat tetap tersimpan setelah reset absensi.
-
-Urutan rilis: jalankan migrasi, deploy `owner-api`, baru terbitkan frontend. Uji regresi `supabase/tests/attendance_resolution.sql` menggunakan fixture dan rollback. Jangan menebak jam pulang karyawan; Owner harus memasukkan waktu yang telah dikonfirmasi.
-
-Audit lanjutan: migrasi `attendance_intent_binding` mengikat percobaan OUT ke `target_attendance_id`. Bukti lama tidak boleh menutup sesi baru setelah Owner menyelesaikan sesi asal. Percobaan OUT sebelum migrasi yang belum selesai perlu dimulai ulang; receipt yang sudah tersimpan tetap bisa dibaca. Prepare dan commit memakai urutan lock karyawan yang sama untuk mengurangi deadlock. Regresi `attendance_intent_binding.sql` menguji konfirmasi Owner di antara prepare/commit, penolakan bukti lama, serta retry bukti baru tanpa duplikasi.
-
-## Pengajuan kehadiran karyawan
-
-Karyawan dapat mengajukan tanggal kerja kemarin sampai tujuh hari sebelumnya, untuk masuk+pulang yang belum tercatat (SHIFT) atau pulang saja pada catatan masuk yang sudah ada (OUT). Waktu menggunakan WIB, tidak boleh di masa depan, dan durasi maksimal 48 jam. Satu pengajuan pending per karyawan/tanggal; retry ID sama tidak menggandakan data. Riwayat karyawan dibatasi 30 terbaru dan hanya dibaca melalui sesi yang valid.
-
-Owner melihat antrean maksimal 100 pengajuan tertua dan wajib memberi catatan untuk menyetujui/menolak. Persetujuan memeriksa ulang catatan dan benturan waktu, serta mencatat UID Owner, waktu keputusan, dan alasan. Penolakan tidak mengubah attendance. SHIFT disetujui sebagai catatan manual yang lengkap, tanpa foto/GPS buatan; OUT menggunakan transaksi konfirmasi pulang yang diaudit. Perpindahan toko saat SHIFT pending memerlukan penolakan/pengajuan ulang. Tidak ada pengubahan catatan yang sudah lengkap.
-
-Tabel `attendance_requests` memakai RLS khusus baca Owner; karyawan memakai RPC backend yang mengikat identitas ke sesi, bukan ID dari browser. Jalankan migrasi lalu deploy attendance-api dan owner-api sebelum frontend. Uji `supabase/tests/attendance_requests.sql` mencakup pending, replay, penolakan, persetujuan SHIFT/OUT, otorisasi, dan integritas bukti.
-
-## Stock Opname
-
-Untuk rilis SO bersama, jalankan migrasi `20261120141942_stock_opname.sql` dan
-`20261120153000_shared_stock_opname.sql` sesuai urutan riwayat proyek. Deploy ulang
-`attendance-api` dan terbitkan frontend dalam jendela rilis yang sama. Klien SO
-versi lama akan diminta memuat ulang halaman. Konfigurasi sesi dan origin tetap digunakan.
-
-Katalog awal 42 barang dan aturan pengisian berlaku untuk semua toko. Nama toko
-diambil dari penempatan karyawan. Simpan pertama membuat satu SO bersama per
-toko per tanggal WIB dan mengambil snapshot katalog untuk hari itu. Karyawan
-aktif di toko tersebut dapat menyimpan sebagian dan memperbarui isian hari ini.
-Perubahan item yang sama perlu ditinjau ulang jika revisinya sudah berbeda.
-Nama kontributor berasal dari sesi pilih nama dan belum memverifikasi identitas pribadi.
-Owner dapat melihat pengisi, atribusi per item, dan riwayat perubahan, serta
-mengoreksi atau menghapus laporan. Laporan individu yang lebih lama tetap bisa
-dibuka sebagai histori dan tidak digabung otomatis. Perubahan master berlaku
-untuk SO berikutnya tanpa mengubah snapshot laporan yang sudah ada.
-Untuk menghapus kategori, kosongkan dulu kategori tersebut dengan memindahkan
-atau menghapus barangnya. Ekspor mengikuti filter tanggal dan nama yang diterapkan.
-
-Jalankan `supabase/tests/stock_opname.sql` dan `supabase/tests/shared_stock_opname.sql`
-di database uji dengan satu Owner yang sudah diprovisikan. Tes menggunakan transaksi
-yang diakhiri dengan rollback.
+YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éíó^·N‹Z–‹­¦ëeŠw¬Ôø€¨©Q• %‘…µ…¸è¨¨1¥¡…Ğ‰…¥…¸m‰Í•¹Í¤±…¹ÍÕ¹œ‘…¸Á•¹•±½±……¸‘…Ñ…t …‰Í•¹Í¤µ±…¹ÍÕ¹œµ‘…¸µÁ•¹•±½±……¸µ‘…Ñ„¤Õ¹ÑÕ¬É¥±¥ÌÑ•É‰…ÉÔ¸%¹ÍÑÉÕ­Í¤A%8‘¤‰…¥…¸Ñ•É‘…¡Õ±Ô¡…¹å„‰•É±…­ÔÕ¹ÑÕ¬É¥±¥Ì±…µ„¸((Œ…Í”€Èƒ
+ÜM•ÑÕÀMÕÁ…‰…Í”±•İ…Ğ…Í¡‰½…É()Õ¹…­…¸ÁÉ½å•¬MÕÁ…‰…Í”å…¹œ‘¥Í¥…Á­…¸Õ¹ÑÕ¬‰Í•¸Q½­¼¸)…±…¹­…¸Í•Ñ¥…À™¥±”ME0€¨©Í•…É„ÕÑÕ ¨¨‘¤Ñ…ˆME0‘¥Ñ½È‰…ÉÔ‘•¹…¸É½±”Á½ÍÑÉ•Í€¸UÉÕÑ…¸¥¹¤‰¥Í„‘¥Á…­…¤Õ¹ÑÕ¬Í•ÑÕÀ…İ…°…Ñ…Ôµ•µ‰Õ…ĞÕ±…¹œÍ¡•µ„Á…‘„ÁÉ½å•¬MÕÁ…‰…Í”‰…ÉÔ¸((ŒŒ€Ä¸	Õ…ĞÍ¡•µ„‘…¸‰Õ­•ĞÁÉ¥Ù…Ğ((Ä¸	Õ­„ÁÉ½å•¬å…¹œ‰•¹…È‘¤€¨©MÕÁ…‰…Í”…Í¡‰½…ÉƒŠHME0‘¥Ñ½ÈƒŠH9•ÜÅÕ•Éä¨¨¸(È¸M…±¥¸Í•±ÕÉÕ ¥Í¤mµ¥É…Í¤Í¡•µ…t¡µ¥É…Ñ¥½¹Ì¼ÈÀÈØÄÄÄÄÀÀÈÄĞÑ}…ÑÑ•¹‘…¹•}Í¡•µ„¹ÍÅ°¤°Ñ•µÁ•°°±…±Ô­±¥¬€¨©IÕ¸¨¨¸MÕ­Í•Ì‰¥…Í…¹å„Ñ…µÁ¥°Í•‰……¤€¨©MÕ•ÍÌ¸9¼É½İÌÉ•ÑÕÉ¹•¨¨¸)…±…¹­…¸µ¥É…Í¤¥¹¤Í…ÑÔ­…±¤Á•ÈÁÉ½å•¬¸(Ì¸	Õ­„€¨©Q…‰±”‘¥Ñ½ÈƒŠHÁÕ‰±¥Œ¨¨‘…¸Á…ÍÑ¥­…¸Ñ…‰•°•µÁ±½å••Í€°…ÑÑ•¹‘…¹•€°…ÑÑ•¹‘…¹•}•Ù¥‘•¹•€°‘…¸½İ¹•É}ÁÉ½™¥±•Í€µÕ¹Õ°¸	Õ­„€¨©MÑ½É…”¨¨‘…¸Á…ÍÑ¥­…¸…ÑÑ•¹‘…¹”µÁ¡½Ñ½Í€‰•ÉÍÑ…ÑÕÌÁÉ¥Ù…Ğ¸5¥É…Í¤µ•µ‰…Ñ…Í¤‰Õ­•Ğ­”)A‘…¸€Ä¸ÀÀÀ¸ÀÀÀ‰åÑ”Á•È™¥±”¸()5¥É…Í¤‰•É©…±…¸‘…±…´Í…ÑÔÑÉ…¹Í…­Í¤¸)¥­„µÕ¹Õ°­½¹™±¥¬¹…µ„Ñ…‰•°…Ñ…ÔÁ½±¥ä°Á•É¥­Í„½‰©•¬å…¹œÍÕ‘… …‘„Í•‰•±Õ´µ•¹½‰„Õ±…¹œ¸)¥­„‰Õ­•ĞÍÕ‘… …‘„°µ¥É…Í¤¡…¹å„µ•¹•É¥µ…¹å„‰¥±„Á•¹…ÑÕÉ…¸ÁÉ¥Ù…Í¤°5%5°‘…¸‰…Ñ…ÌÕ­ÕÉ…¹¹å„Í…µ„¸-•±½±„Á•¹…ÑÕÉ…¸‰Õ­•Ğ‘…¸™¥±”µ•±…±Õ¤…Í¡‰½…ÉMÑ½É…”¸mA•µ‰Õ…Ñ…¸‰Õ­•Ñt¡¡ÑÑÁÌè¼½ÍÕÁ…‰…Í”¹½´½‘½Ì½Õ¥‘•Ì½ÍÑ½É…”½‰Õ­•ÑÌ½É•…Ñ¥¹œµ‰Õ­•ÑÌ¤ƒ
+Üm-•‰¥©…­…¸MÑ½É…•t¡¡ÑÑÁÌè¼½ÍÕÁ…‰…Í”¹½´½‘½Ì½Õ¥‘•Ì½ÍÑ½É…”½Í•ÕÉ¥Ñä½…•ÍÌµ½¹ÑÉ½°¤((ŒŒ€È¸…™Ñ…É­…¸…­Õ¸=İ¹•È((Ä¸	Õ­„€¨©ÕÑ¡•¹Ñ¥…Ñ¥½¸ƒŠHUÍ•ÉÌƒŠH‘ÕÍ•È¨¨¸	Õ…Ğ…­Õ¸‘•¹…¸•µ…¥°å…¹œ¹‘„­Õ…Í…¤‘…¸­…Ñ„Í…¹‘¤Õ¹¥¬°…Ñ…Ô­¥É¥´Õ¹‘…¹…¸±•İ…Ğ…Í¡‰½…É¸A…ÍÑ¥­…¸•µ…¥°…­Õ¸ÍÕ‘… Ñ•É­½¹™¥Éµ…Í¤¸)¥­„µ•µ‰Õ…Ğ…­Õ¸Í•¹‘¥É¤±•İ…Ğ…Í¡‰½…É‘…¸ÍÕ‘… µ•µÙ•É¥™¥­…Í¤…±…µ…Ğ•µ…¥±¹å„°Õ¹…­…¸½ÁÍ¤­½¹™¥Éµ…Í¤…­Õ¸å…¹œÑ•ÉÍ•‘¥„¸(È¸M…±¥¸€¨©UÍ•ÈU%¨¨‘…É¤‘•Ñ…¥°…­Õ¸¸¤Ñ…ˆME0‘¥Ñ½È‰…ÉÔ°Ñ•µÁ•°¥Í¤mÍ­É¥ÀÁÉ½Ù¥Í¥½¹¥¹t¡µ…¹Õ…°½ÁÉ½Ù¥Í¥½¹}½İ¹•È¹ÍÅ°¤¸…¹Ñ¤UU%¹½°Á…‘„‰…É¥Ì½İ¹•É}Õ¥½¹ÍÑ…¹ĞÕÕ¥€èô€¸¸¹€‘•¹…¸U%Ñ…‘¤°Á•ÉÑ…¡…¹­…¸Ñ…¹‘„­ÕÑ¥À°±…±Ô­±¥¬€¨©IÕ¸¨¨¸UU%­•‘Õ„‘¤‰…İ…¡¹å„…‘…±… ¹¥±…¤Á•µ•É¥­Í……¸¸%Í¤Í­É¥À¡…¹å„µ•µ•É±Õ­…¸U%¸(Ì¸	Õ­„Á•¹…ÑÕÉ…¸€¨©ÕÑ¡•¹Ñ¥…Ñ¥½¸¨¨‘…¸µ…Ñ¥­…¸€¨©±±½Ü¹•ÜÕÍ•ÉÌÑ¼Í¥¸ÕÀ¨¨Í•ÉÑ„€¨©±±½Ü…¹½¹åµ½ÕÌÍ¥¸µ¥¹Ì¨¨¸A•ÉÑ…¡…¹­…¸ÁÉ½Ù¥‘•È€¨©µ…¥°¨¨……È…­Õ¸=İ¹•È‘…Á…Ğµ…ÍÕ¬‘•¹…¸•µ…¥°‘…¸­…Ñ„Í…¹‘¤Í……Ğ™É½¹Ñ•¹‘¥¥¹Ñ•É…Í¥­…¸¸()AÉ½™¥°=İ¹•È¡…¹å„‘¥‰•É¥­…¸±•İ…ĞÍ­É¥À…‘µ¥¸¸5•¹©…±…¹­…¸Õ±…¹œÁÉ½Ù¥Í¥½¹¥¹œÕ¹ÑÕ¬U%å…¹œÍ…µ„…µ…¸¸mA•¹•±½±……¸Á•¹Õ¹„ÕÑ¡t¡¡ÑÑÁÌè¼½ÍÕÁ…‰…Í”¹½´½‘½Ì½Õ¥‘•Ì½…ÕÑ ½ÕÍ•ÉÌ¤ƒ
+ÜmA•¹…ÑÕÉ…¸ÕÑ¡t¡¡ÑÑÁÌè¼½ÍÕÁ…‰…Í”¹½´½‘½Ì½Õ¥‘•Ì½…ÕÑ ½•¹•É…°µ½¹™¥ÕÉ…Ñ¥½¸¤((ŒŒ€Ì¸)…±…¹­…¸Á•¹Õ©¥…¸¥é¥¸((Ä¸	Õ­„Ñ…ˆME0‘¥Ñ½È‰…ÉÔ¸M…±¥¸Í•±ÕÉÕ mÍ­É¥ÀÕ©¤…Í”€Ét¡Ñ•ÍÑÌ½Á¡…Í”É}Á•Éµ¥ÍÍ¥½¹Ì¹ÍÅ°¤°±…±Ô­±¥¬€¨©IÕ¸¨¨¸(È¸…É¤¡…Í¥°€¨©1U1ULƒŠP½¹ÍÑÉ…¥¹Ğ°I1L°¥é¥¸=İ¹•È°‘…¸­½¹™¥ÕÉ…Í¤MÑ½É…”…Í”€È¨¨¸M­É¥Àµ•µ‰Õ…Ğ‰…É¥Ì™¥­Ñ¥˜Í•µ•¹Ñ…É„°µ•¹Õ©¤…­Í•Ì‘•¹…¸É½±”…¹½¹€°ÕÑ ¹½¸µ=İ¹•È°=İ¹•È°‘…¸Í•ÉÙ¥•}É½±•€°±…±Ôµ•±…­Õ­…¸I=11	-€¸(Ì¸)¥­„…‘„•ÉÉ½È°…Ñ…ĞÁ•Í…¸Á•ÉÑ…µ…¹å„‰•Í•ÉÑ„¹…µ„™¥±”å…¹œ‘¥©…±…¹­…¸¸)¥­„•‘¥Ñ½Èµ•±…Á½É­…¸ÑÉ…¹Í…­Í¤µ…Í¥ ……°°©…±…¹­…¸I=11	,í€Í•‰•±Õ´µ•¹½‰„Õ±…¹œ¸U¹ÑÕ¬•ÉÉ½È¥é¥¸Í……Ğµ•µ‰Õ…ĞÁ½±¥äMÑ½É…”°Á…ÍÑ¥­…¸ME0‘¥Ñ½Èµ•µ…­…¤É½±”Á½ÍÑÉ•Í€‘…¸ÁÉ½å•¬µ•µ‰•É¥­…¸¥é¥¸Á•¹•±½±……¸Á½±¥äÁ…‘„ÍÑ½É…”¹‰Õ­•ÑÍ€Í•ÉÑ„ÍÑ½É…”¹½‰©•ÑÍ€¸()Q•ÌME0µ•µ•É¥­Í„­½¹™¥ÕÉ…Í¤‰Õ­•Ğ‘…¸…ÑÕÉ…¸…­Í•Ì‘…Ñ…‰…Í”¸M……Ğ‰Õ­•Ğ­½Í½¹œ°Á•µ•É¥­Í……¸½‰©•¬¡…¹å„µ•¹…­ÕÀ…ÑÕÉ…¸‘…¸¡…Í¥°±¥ÍÑ¥¹œ­½Í½¹œ¸A•¹Õ©¥…¸!QQ@Õ¹ÑÕ¬ÕÁ±½…°Í¥¹•UI0°‘…¸Ù…±¥‘…Í¤¥Í¤)Aµ•¹¥­ÕÑ¤¥µÁ±•µ•¹Ñ…Í¤‰…­•¹¸((ŒŒ…Ñ…Ñ…¸Õ¹ÑÕ¬¥¹Ñ•É…Í¤((´…Í¡‰½…É=İ¹•Èµ•µ‰…„­½±½´¥±¹…µ”±¥Í}…Ñ¥Ù”±É•…Ñ•‘}…Ğ±ÕÁ‘…Ñ•‘}…Ñ€‘…É¤•µÁ±½å••Í€¸!…Í A%8¡…¹å„Ñ•ÉÍ•‘¥„Õ¹ÑÕ¬‰…­•¹Ñ•Á•É…å„¸A•¹…µ‰…¡…¸½•‘¥Ğ­…Éå…İ…¸‘…¸Á•µ‰•É¥…¸Í¥¹•UI0™½Ñ¼…­…¸µ•±•İ…Ñ¤‰…­•¹å…¹œµ•µÙ•É¥™¥­…Í¤ÁÉ½™¥°=İ¹•È¸(´İ½É­}‘…Ñ•€‘¥¡¥ÑÕ¹œ‘…Ñ…‰…Í”‘…É¤¡•­}¥¹}…Ñ€‘…±…´]%¸…Í”€Ì…­…¸µ•¹Õ±¥Ì…‰Í•¹Í¤‘…¸‰Õ­Ñ¤‘…±…´Í…ÑÔÑÉ…¹Í…­Í¤°µ•¹•…­­…¸‰…Ñ…ÌÍ•Í¤°Í•ÉÑ„µ•¹…¹…¹¤A%8°¥‘•µÁ½Ñ•¹Í¤°‘…¸ÕÁ±½…¸(´ME0‘¥Ñ½Èµ•¹•É…Á­…¸0Ñ…¹Á„µ•¹…µ‰…¡­…¸•¹ÑÉ¤É¥İ…å…ĞMÕÁ…‰…Í”1$¸	¥±„¹…¹Ñ¤‰•É…±¥ ­”‘•Á±½åµ•¹Ğµ¥É…Í¤±•İ…Ğ1$°É•­½¹Í¥±¥…Í¤É¥İ…å…Ğ‘•¹…¸Í¡•µ„å…¹œÍÕ‘… Ñ•ÉÁ…Í…¹œÍ•‰•±Õ´µ•±…­Õ­…¸ÁÕÍ ¸((ŒŒ…Í”€Ìƒ
+Ü	…­•¹…‰Í•¹Í¤((Ä¸M•Ñ•±… …Í”€ÈÑ•ÉÁ…Í…¹œ°©…±…¹­…¸Í•±ÕÉÕ µ¥É…Ñ¥½¹Ì¼ÈÀÈØÄÄÄÄÀÀÌÀÔá}…ÑÑ•¹‘…¹•}‰…­•¹¹ÍÅ±€‘¤ME0‘¥Ñ½È¸)…±…¹­…¸Ñ•ÍÑÌ½Á¡…Í”Í}ÑÉ…¹Í…Ñ¥½¹Ì¹ÍÅ±€‘…¸Á…ÍÑ¥­…¸¡…Í¥±¹å„1U1UM€¸(È¸¤…Í¡‰½…É€¨©‘”Õ¹Ñ¥½¹ÌƒŠHM•É•ÑÌ¨¨°¥Í¤11=]}=I%%9M€‘•¹…¸‘…™Ñ…È½É¥¥¸å…¹œ‘¥Á¥Í…¡­…¸­½µ„°µ¥Í…±¹å„¡ÑÑÀè¼½±½…±¡½ÍĞèÔÄÜÌ±¡ÑÑÁÌè¼½…‰Í•¹Í¤¹•á…µÁ±”¹½µ€¸	Õ…ĞIQ}1%5%Q}MIQ€……¬µ¥¹¥µ…°€ÌÈ‰åÑ”µ•±…±Õ¤Á…ÍÍİ½Éµ…¹…•È¸¹Ù¥É½¹µ•¹Ğ‰…İ……¸MÕÁ…‰…Í”µ•¹å•‘¥…­…¸MUA	M}UI1€‘…¸MUA	M}MIY%}I=1}-e€¸(Ì¸U¹ÑÕ¬µ•µ…Í…¹œÕ¹Ñ¥½¸Í•…É„µ…¹Õ…°‘•¹…¸MÕÁ…‰…Í”1$ØÌ°©…±…¹­…¸ÍÕÁ…‰…Í”™Õ¹Ñ¥½¹Ì‘•Á±½ä…ÑÑ•¹‘…¹”µ…Á¤€´µÉ•µ½Ñ”õAI=)Q}I€´µÕÍ”µ…Á¥€‘…É¤™½±‘•ÈÁÉ½å•¬¸…¹Ñ¤AI=)Q}I€‘•¹…¸%ÁÉ½å•¬ÑÕ©Õ…¸¸-½¹™¥ÕÉ…Í¤Ù•É¥™å}©İĞõ™…±Í•€‰•É±…­Ô­¡ÕÍÕÌ•¹‘Á½¥¹Ğ­…Éå…İ…¸å…¹œµ•µ…­…¤Í•Í¤A%8¸=Á•É…Í¤Í•±…¥¸‘…™Ñ…È‘…¸Ù•É¥™¥­…Í¤µ•µ•É¥­Í„Ñ½­•¸Í•Í¤Á…‘„¡…¹‘±•È¸(Ğ¸UI0A$‰•É‰•¹ÑÕ¬¡ÑÑÁÌè¼½AI=)Q}I¹ÍÕÁ…‰…Í”¹¼½™Õ¹Ñ¥½¹Ì½ØÄ½…ÑÑ•¹‘…¹”µ…Á¥€¸M•µÕ„½Á•É…Í¤µ•¹Õ¹…­…¸A=MP)M=8¸I•ÍÁ½¹Ì‰•É¥Í¤‘…Ñ„¡…¹å„Í•Ñ•±… ½Á•É…Í¤‘…Ñ…‰…Í”ÍÕ­Í•Ì¸I•ÍÁ½¹Ì•ÉÉ½Èµ•µ…­…¤ÍÑ…ÑÕÌ!QQ@€ĞÀÀ¼ĞÀÄ¼ĞÀÌ¼ĞÀä¼ĞÄÌ¼ĞÈä¼ÔÀÌ¸()ğ=Á•É…Í¤ğ%Í¤)M=8ğ=Ñ½É¥Í…Í¤ğ)ğ€´´´ğ€´´´ğ€´´´ğ)ğ±¥ÍÑ€ğì‰½Á•É…Ñ¥½¸ˆè‰±¥ÍĞ‰õ€ğAÕ‰±¥¬°É…Ñ”±¥µ¥Ñ•ğ)ğÙ•É¥™å€ğ½Á•É…Ñ¥½¹€°•µÁ±½å••}¥‘€°Á¥¹€ğA%8­…Éå…İ…¸ğ)ğÍÑ…ÑÕÍ€ğì‰½Á•É…Ñ¥½¸ˆè‰ÍÑ…ÑÕÌ‰õ€ğÕÑ¡½É¥é…Ñ¥½¸è	•…É•ÈQ=-9€ğ)ğÁÉ•Á…É•€ğ½Á•É…Ñ¥½¹€°…ÑÑ•µÁÑ}¥‘€UU%°…Ñ¥½¹€%8…Ñ…Ô=UPğQ½­•¸Í•Í¤ğ)ğ±½½ÕÑ€ğ½Á•É…Ñ¥½¹€ğQ½­•¸Í•Í¤ğ)ğÉ••¥ÁÑ€ğ½Á•É…Ñ¥½¹€°…ÑÑ•µÁÑ}¥‘€UU%ğQ½­•¸Í•Í¤ğ)ğÍÕ‰µ¥Ñ€ğ½Á•É…Ñ¥½¹€°…ÑÑ•µÁÑ}¥‘€°Á¡½Ñ½€‰…Í”ØĞ)AÑ…¹Á„ÁÉ•™¥à°±…Ñ¥ÑÕ‘•€°±½¹¥ÑÕ‘•€°…ÕÉ…å}µ€ğQ½­•¸Í•Í¤ğ()M¥µÁ…¸…ÑÑ•µÁÑ}¥‘€å…¹œÍ…µ„Í……ĞÉ•ÑÉä¸)¥­„É•ÍÁ½¹ÌÍÕ‰µ¥Ğ¡¥±…¹œ°Õ±…¹¤ÍÕ‰µ¥Ğ‘•¹…¸%Ñ•ÉÍ•‰ÕĞÕ¹ÑÕ¬µ•µÁ•É½±• ¡…Í¥°½µµ¥ĞÍ•‰•±Õµ¹å„Í•±…µ„Í•Í¤‰•±Õ´­•‘…±Õİ…ÉÍ„¸M•Ñ•±… Í•Í¤¡…‰¥Ì°Ù•É¥™¥­…Í¤A%8±…¤Õ¹ÑÕ¬µ•µ‰…„ÍÑ…ÑÕÌÑ•É‰…ÉÔ¸A%8‘¥‰•ÉÍ¥¡­…¸Í•Ñ•±… Ù•É¥™¥­…Í¤¸M•Ñ•±… …‰Í•¸°Í•Í¤Ñ•Ñ…À…­Ñ¥˜Í…µÁ…¤­•‘…±Õİ…ÉÍ„…Ñ…ÔÁ•¹Õ¹„­•±Õ…È¸()A•¹…ÑÕÉ…¸µ…Í„Í•Í¤A%8€¡‘•™…Õ±Ğ€àØĞÀÀ‘•Ñ¥¬Í•Ñ•±… µ¥É…Í¤…­Õ¸¤‘…¸‰…Ñ…ÌÍ•Í¤­•É©„€¡…İ…°€àØĞÀÀ‘•Ñ¥¬¤‰•É…‘„‘¤…ÑÑ•¹‘…¹•}ÁÉ¥Ù…Ñ”¹Í•ÑÑ¥¹Í€¸!…Í A%8É½¸É¥µ•µ…­…¤¡•±Á•È™Õ¹Ñ¥½¹Ì½}Í¡…É•½Á¥¸¹ÑÍ€ì¡•±Á•È¥¹¤©Õ„…­…¸‘¥Á…­…¤µ…¹…©•µ•¸­…Éå…İ…¸Á…‘„™…Í”‰•É¥­ÕÑ¹å„¸½Éµ…Ğ™½Ñ¼…‘…±… )Aµ…­Í¥µ…°€Ä¸ÀÀÀ¸ÀÀÀ‰åÑ”°Í¥Í¤µ…­Í¥µ…°€ÈÀĞàÁ¥­Í•°‘…¸µ…­Í¥µ…°€Ğµ•…Á¥­Í•°¸1½­…Í¤Í•…ÈÑ•Ñ…À¡…ÉÕÌ‘¥…µ‰¥°½±• ­±¥•¸¸M•ÉÙ•Èµ•µ‰•É¤…Àİ…­ÑÔ½µµ¥Ğ¸()±•…¹ÕÀÕÁ±½………°Ñ•ÉÍ•‘¥„‘¤ÍÉ¥ÁÑÌ½±•…¹ÕÀ¹ÑÍ€¸=Á•É…Ñ½È‘…Á…Ğµ•¹©…±…¹­…¹¹å„Í•…É„Ñ•É­½¹ÑÉ½°µ•¹Õ¹…­…¸•¹¼‘•¹…¸•¹Ù¥É½¹µ•¹ĞÍ•ÉÙ•È°µ•±…±Õ¤‘•¹¼ÉÕ¸€´µ…±±½Üµ•¹Ø€´µ…±±½Üµ¹•Ğ€´µ½¹™¥œÍÕÁ…‰…Í”½‘•¹¼¹©Í½¸ÍÕÁ…‰…Í”½ÍÉ¥ÁÑÌ½±•…¹ÕÀ¹ÑÍ€¸±•…¹ÕÀµ•µ¥±¥ µ…­Í¥µ…°€ÄÀÀ¥¹Ñ•¹ĞÑ…¹Á„¡…Í¥°å…¹œÍÕ‘… ­•‘…±Õİ…ÉÍ„±•‰¥ ‘…É¤Í…ÑÔ©…´¸A•¹¡…ÁÕÍ…¸MÑ½É…”‘¥±…­Õ­…¸Í•‰•±Õ´Á•µ‰•ÉÍ¥¡…¸¥¹Ñ•¹Ğ‘…Ñ…‰…Í”¸…Ñ…Ñ…¸‘…¸™½Ñ¼…‰Í•¹Í¤å…¹œÍÕ‘… ½µµ¥ÑÑ•µ•µÁÕ¹å…¤­•‰¥©…­…¸É•Ñ•¹Í¤Ñ•ÉÁ¥Í… Í•ÍÕ…¤Á•ÉÍ•ÑÕ©Õ…¸=İ¹•È¸())…±…¹­…¸‘•¹¼Ñ…Í¬€´µ½¹™¥œÍÕÁ…‰…Í”½‘•¹¼¹©Í½¸¡•­€‘…¸‘•¹¼Ñ…Í¬€´µ½¹™¥œÍÕÁ…‰…Í”½‘•¹¼¹©Í½¸Ñ•ÍÑ€Õ¹ÑÕ¬Á•µ•É¥­Í……¸±½­…°¸A•¹Õ©¥…¸ME0±½­…°µ•µ…­…¤A½ÍÑÉ•ME0‘•¹…¸Í¥µÕ±…Í¤Í¡•µ„MÕÁ…‰…Í”¸U©¤!QQ@µ•¹å•±ÕÉÕ Á…‘„‘”IÕ¹Ñ¥µ”°ÍÕµ‰•È%@…Ñ•İ…ä°‰…Ñ…ÌATÉ½¸È½)A°‘…¸…¹Õ…¸©…É¥¹…¸MÑ½É…”µ…Í¥ ¡…ÉÕÌ‘¥±…­Õ­…¸Á…‘„ÁÉ½å•¬ÍÑ…¥¹œÍ•‰•±Õ´Á•¹Õ¹……¸½Á•É…Í¥½¹…°¸mÕÑ•¹Ñ¥­…Í¤‘”Õ¹Ñ¥½¹Ít¡¡ÑÑÁÌè¼½ÍÕÁ…‰…Í”¹½´½‘½Ì½Õ¥‘•Ì½™Õ¹Ñ¥½¹Ì½…ÕÑ ¤((ŒŒ…Í”€Ôƒ
+Ü…Í¡‰½…É=İ¹•È((Ä¸M•Ñ•±… …Í”€È‘…¸€ÌÑ•ÉÁ…Í…¹œ°©…±…¹­…¸mµ¥É…Í¤=İ¹•Ét¡µ¥É…Ñ¥½¹Ì¼ÈÀÈØÄÄÄÄÀÀÔÀĞå}½İ¹•É}µ…¹…•µ•¹Ğ¹ÍÅ°¤‘¤ME0‘¥Ñ½È¸)…±…¹­…¸mÕ©¤=İ¹•Ét¡Ñ•ÍÑÌ½Á¡…Í”Õ}½İ¹•È¹ÍÅ°¤‘…¸Á…ÍÑ¥­…¸¡…Í¥±¹å„‘¥…İ…±¤€¨©1U1UL¨¨¸U©¤µ•µ…­…¤‘…Ñ„Í•µ•¹Ñ…É„‘…¸µ•±…­Õ­…¸É½±±‰…¬¸(È¸A…Í…¹œ‘”Õ¹Ñ¥½¸‘•¹…¸MÕÁ…‰…Í”1$ØÌµ•±…±Õ¤ÍÕÁ…‰…Í”™Õ¹Ñ¥½¹Ì‘•Á±½ä½İ¹•Èµ…Á¤€´µÉ•µ½Ñ”õAI=)Q}I€´µÕÍ”µ…Á¥€¸Õ¹…­…¸­½¹™¥ÕÉ…Í¤11=]}=I%%9M€å…¹œ©Õ„‘¥Á…­…¤…Í”€Ì¸Õ¹Ñ¥½¸µ•µÙ…±¥‘…Í¤…•ÍÌÑ½­•¸‘•¹…¸MÕÁ…‰…Í”ÕÑ ‘…¸µ•µ•É¥­Í„½İ¹•É}ÁÉ½™¥±•Í€Í•‰•±Õ´Í•Ñ¥…À½Á•É…Í¤¸m½­Õµ•¹Ñ…Í¤Ù…±¥‘…Í¤Í•Í¥t¡¡ÑÑÁÌè¼½ÍÕÁ…‰…Í”¹½´½‘½Ì½É•™•É•¹”½©…Ù…ÍÉ¥ÁĞ½…ÕÑ µ•ÑÕÍ•È¤(Ì¸U¹ÑÕ¬É•Í•Ğ­…Ñ„Í…¹‘¤=İ¹•È°Ñ…µ‰…¡­…¸UI0…‰Í½±ÕĞ¡…±…µ…¸€½½İ¹•È½É•Í•Ñ€‘¤€¨©ÕÑ¡•¹Ñ¥…Ñ¥½¸ƒŠHUI0½¹™¥ÕÉ…Ñ¥½¸ƒŠHI•‘¥É•ĞUI1Ì¨¨¸½¹Ñ½ ±½­…°¡ÑÑÀè¼½±½…±¡½ÍĞèÔÄÜÌ½½İ¹•È½É•Í•Ñ€¸	Õ­„Ñ…ÕÑ…¸É•Í•Ğ‘¤‰É½İÍ•Èå…¹œÍ…µ„‘•¹…¸Á•Éµ¥¹Ñ……¸…İ…°­…É•¹„…±ÕÉ¹å„µ•µ…­…¤A-¸m½­Õµ•¹Ñ…Í¤É•Í•Ğ­…Ñ„Í…¹‘¥t¡¡ÑÑÁÌè¼½ÍÕÁ…‰…Í”¹½´½‘½Ì½É•™•É•¹”½©…Ù…ÍÉ¥ÁĞ½…ÕÑ µÉ•Í•ÑÁ…ÍÍİ½É‘™½É•µ…¥°¤(Ğ¸)…±…¹­…¸™É½¹Ñ•¹‘…¸µ…ÍÕ¬ƒmzŞÚ$z{-®éÜj×™ËˆÙÚ[‹›İÈš]˜]˜YØ[^Ù[Ù\H[™Ø]\˜[ˆ]\Y[XZØZH]][ZØ\ÚH[ˆ“Èİ\X˜\ÙK‚‚•\][ˆ[X\Ø[™Ø[ˆÙ][Z[™İZšX[ˆİYÚ[™È[ˆ\œÙ]ZX[ˆ›ÙZÜÚB‚ŒKˆ\˜\Ø[ˆŒŒLLLLMÌ—ÛİÛ™\—Ü™[XXš[]KœÜ[YHÚÙ[XHX[™È[ZY[Z[ZÚHZYÜ˜\ÚHXœÙ[œÚH[™Üİ[™ËˆZYÜ˜\ÚHY[˜[X˜ZX™[[™H\š[XH˜[œØZÜÚHš]˜][ˆ”ÈİÛ™\—Ø\WØÚ[™ÙXˆš]Ø^X]ZYÜ˜\ÚH›ÙZÜÚHÙX™[[[XHÛÜÛÛ™ËÙZ[™ÙØH\šZÜØHÚÙ[XH]Ø[ÙX™[[HY[XZØZH\š[Z\ÚÙ[\ZZYÜ˜\ÚK‚Œ‹ˆ˜[[šØ[ˆİ\X˜\ÙKİ\İËÛİÛ™\—Ü™[XXš[]KœÜ[HİYÚ[™Ëˆ[™İZšX[ˆY[X˜][Ø[ˆš^\™HY[[ZH›Û˜XÚÈ[ˆY[Y\šZÜØH™\^KÛÛ™›ZÈ^[ØYÙYØYØ[[ˆ]ÛZZËÙ\H^š[‹‚ŒËˆ\Ø[™È[[™ÈİÛ™\‹X\XÙ[]YX[ˆœ›Û[™ˆ[˜İ[Ûˆ˜\HÛÛ\]X™[[™Ø[ˆÛY[ˆ[XHY[[ZHQ\›Z[X[ˆX[™ÈXX]Ù\™\‹ˆ˜[Z[˜[ˆ™]H[™Ø[ˆQØ[XHY[Y\›ZØ[ˆœ›Û[™˜\K‚ˆZšHY[XZØZHZİ[ˆİÛ™\ˆİYÚ[™Ë\›X\İZÈÙÚ[‹[X˜ZÙY]Ø\œÚ\[™ÙØZ˜YØ[[ˆ]Z[›İËˆ\Ú[œ›İÜÙ\ˆ[™Ø[ˆ™\ÜÛœÈÚ[][\ÚH[XHY[]™\šYšZØ\ÚHRH[ˆÛÛ˜ZÈ™\ÜÛœË‚‚˜][™[˜ÙWÜš]˜]K›İÛ™\—ØÚ[™ÙWÜ™\]Y\İØY[Z[\[ˆQİÛ™\‹\™Ù]Ü\˜\ÚK\Ú^[ØY[ˆØZİHÛÛ[Z]ˆZÜÙ\È[XHY[[ZH[™ÜÚHÙ\™\‹ˆ[™H\š[XH\\Z[šØ[ˆYØ\ˆ[™Ú\š[X[ˆ[[™È]\ZÙ[˜[KˆÙXšZ˜ZØ[ˆ™][œÚ[XHY[Y\›ZØ[ˆÙ\]\Ø[ˆİÛ™\ˆÙX™[[HÛX[\XZİYšØ[‹‚‚’šZØH›Û˜XÚÈ\ZØ\ÚH\\›ZØ[‹İ[˜ZØ[ˆÙ[X˜[Hœ›Û[™[ˆİÛ™\‹X\X™\œÚHÙX™[[[XKˆX™[[ˆ”È[X˜Z[ˆ\]]\YKˆÙZY\˜[ˆØ\X]Ø[ˆY[™Ùİ[˜ZØ[ˆTHX[™ÈØ[XHÙ\\HÙX™[[H[X˜\X[‹‚‚•ZšHÚØ[[™Ø[ˆœH\İœH[ˆ[[ˆœH[ˆZ[ˆ\šZÜØH[™ÜÚH[™Ø[ˆ[›È\ÚÈKXÛÛ™šYÈİ\X˜\ÙKÙ[›ËšœÛÛˆÚXÚØ‚‚ˆÈÈY]˜YØ[[ˆ\\ÈÚÛÈ\›X[™[‚‚“ZYÜ˜\ÚHŒŒLLLLMM×ÛİÛ™\—ÜØÚY[WØ[™ÜİÜ™WÙ[][Û‹œÜ[Y[˜[X˜Z[Z[\[˜[ˆØ]HÚY[ˆY[\\˜˜\ZH›ÜÙ\È[™Ú\\Ø[ˆÚÛËˆ\˜\Ø[ˆZYÜ˜\ÚK[H\ŞHİÛ™\‹X\X[ˆœ›Û[™‚‚’ÛZÈÙ[˜YØ[[ZÈY[Z[ZKËË]]HY[™ÛÜÛÛ™ÚØ[›XKˆ[\]H^Ù[Y[XZØZHØ]HXˆ˜YØ[[™Ø[ˆQØ\X]Ø[ˆ\œÙ[X[ZKˆ[\]H[XH[ZÈÚÛÈ[ˆ[[ˆX[™ÈØ[XH]\\]Z[\Ü‹ˆÙ[ÛÜÛÛ™È[[Hš[HY[\\Z[šØ[ˆÚYX[™ÈİYZ\œÚ[\[‹‚‚”[™ZØ[ˆ]]H\œÚ\Ø[ˆØ\X]Ø[ˆX[™ÈX\ÚZ\™Y\ˆÙX™[[HY[™Ú\\ÈÚÛÛXKˆ[™Ú\\Ø[ˆÚÛÈYØHY[™Ú\\È˜YØ[ÚÛÈ\œÙX]ˆXœÙ[œÚH[ˆZİH]\\œÙYXHH™ZØ\Ù[]XHÚÛÈ[™Ø[ˆÚÛÈ\İÜš\È™[[H\˜Ø]]‚‚ˆÈÈ™\Ù]]HXœÙ[œÚHZšB‚“ZYÜ˜\ÚHŒŒLLLLMLÌŒ—ÛİÛ™\—Ø][™[˜ÙWÜ™\Ù]œÜ[Y[˜[X˜Z™\Ù]\šH
+Š”[™Ø]\˜[ˆ8¡¤ˆ™\Ù]]HXœÙ[œÚJŠ‹ˆ\˜\Ø[ˆZYÜ˜\ÚHÙX™[[HY[X\Ø[™È[[™ÈİÛ™\‹X\X[ˆœ›Û[™‚‚“İÛ™\ˆ\\ÈY[™Ù]ZÈ‘TÑU[ZÈY[™Ú\\ÈÙ[\ZØ]][ˆXœÙ[œÚH[ˆZİH\šØZ]ˆ™\Ù]Y[\\Z[šØ[ˆZİ[‹Ø\X]Ø[‹ÚÛË˜YØ[[ˆ˜[XH\ZØ\ÚKˆ›İÈZ\\ÈY[[ZHİÜ˜YÙHTKˆšZØH[™Ú\\Ø[ˆ›İÈ\š[K[[™ÚHHX[ÙÈX[™ÈØ[XH[ZÈY[XZØZH[™H\š[XHX[™ÈØ[XKˆ›İÈX[™ÈX\ÚZY[[™ÙİH[X™\œÚZ[ˆ]\\˜Ø]]HX™[š]˜]Ø[\ZHİÜ˜YÙHY[™ÛÛ™š\›X\ÚH[™Ú\\Ø[‹‚‚ˆÈÈÜ[Ø\X]Ø[ˆ[ˆ˜YØ[šX˜YB‚’Ø\X]Ø[ˆY[Z[ZÚÛÈ[ˆ˜[XK[HX\İZÈÙHY[HXœÙ[œÚKˆØ[[™\ˆ
+Š’˜YØ[Ø^XJŠˆY[X˜XØH˜YØ[İÛ™\ˆ\ˆ[[ˆY[[ZHÜ\˜\ÚHØÚY[XYH][™[˜ÙKX\Xˆ”È][™[˜ÙWÛ^WÜØÚY[X[XH\]\[™ÙÚ[Ù\šXÙH›ÛNÈY[]\È[ˆÚÛÈ]\[šØ[ˆ\šHÙ\ÚHX[™ÈX\ÚZZİY‹ˆ\˜[Y]\ˆ[\ŞYYKÜİÜ™H\šHœ›İÜÙ\ˆYZÈYİ[˜ZØ[‹ˆ˜YØ[ÛÜÛÛ™ÈZØ[ˆX\ÈÛÙHÈ™\˜\HX\‹ˆ˜YØ[YZÈY[™İX˜ZZİH]]Hİ]\ÈÙZY\˜[ˆZİX[ˆ˜[XH›ÙZÈ]\ZY[X[‹‚‚”[™İZšX[ˆœH\İY[˜ØZİ\˜[Y\ÚH[™Ú[[ˆİ\X˜\ÙKİ\İËÙ[\ŞYYWÜÜ[ÜØÚY[KœÜ[Y[˜ØZİ\\ÛÛ\ÚHØ\X]Ø[‹˜]\È[[‹Ù\ÚHXØX]ÚÙY[]Ø\œØKØ\X]Ø[ˆ›Û˜ZİY‹[ˆ^š[ˆ”Ëˆ˜[[šØ[ˆÔS\œÙX]YH]X˜\ÙH[™İZšX[ˆÙ][ZÙ[\ZZYÜ˜\ÚNÈ˜[œØZÜÚHK\›Û˜XÚË‚‚ˆÈÈ\˜˜ZZØ[ˆ[Y\šZÜØX[ˆZİH
+LÈ›İ™[X™\ˆŒŠB‚“ZYÜ˜\ÚHš^Ø][™[˜ÙWÚ[[ÜÙ\ÜÚ[Û˜Y[™ÙØ[H[™ÜÚH›ÙZÜÚH[XHX[™ÈX\ÚZY[X˜XØHÛÛÛHSˆX[™ÈİYZZ\\Ëˆ™YÜ™\ÚHİ\X˜\ÙKİ\İËØ][™[˜ÙWØÛÛ[Z]Øİ\œ™[œÜ[Y[š˜[[šØ[ˆ[\ˆ[ZØ\X]Ø[ˆ8¡¤ˆÚX\Ø[ˆZİH8¡¤ˆ˜XØH[[8¡¤ˆX\İZÈ8¡¤ˆ™]H8¡¤ˆ[[™ÈYHÚÙ[XH\šÚ[šH[[H˜[œØZÜÚH›Û˜XÚËˆØ[Y\˜HY[X˜]\ÚH[˜[X[ˆ^š[‹İšY[ÈÙ[[XHŒ]ZËY[™Ú[ZØ[ˆİ™X[H\›[X˜]Ù][Z[X˜][[‹[ˆY[YYXZØ[ˆ\Ø[ˆ[ZÈY[˜ÛØ˜HÙ[X˜[K‚‚ˆÈÈ\HXœÙ[ˆ[[™È[ˆÛÛ™š\›X\ÚHİÛ™\‚‚“ZYÜ˜\ÚH][™[˜ÙWÜ™\ÛÛ][Û˜Y[\\Z[šØ[ˆØ]][ˆ[œH˜[H[[™ËˆÙ][Z™[™[HÙ\ÚHÙ\™\ˆ
+Y˜][˜[JH]Ø]İ]\È\šH˜\HYZÈYÚH\˜›ÚÚ\‹ˆØX]Ø\X]Ø[ˆY[Z[\[ˆXœÙ[ˆX\İZÈ˜\KÙ\ÚH[XH]]\ÙXØ\˜HYZ[š\İ˜]Yˆ
+ÛÜÙYØ]
+H[[H˜[œØZÜÚHX[™ÈØ[XNÈÚXÚ×Ûİ]Ø]]\ÛÜÛÛ™ÈØ[\ZHİÛ™\ˆY[™ÛÛ™š\›X\ÚHØZİHÙX™[˜\›XKˆÙ\ÚHX[™ÈX\ÚZ[[H™[™[HÙ\š˜H]\ØZšXˆ[[™È\›XšZZ[KˆØ]HØ]][ˆ\ˆØ\X]Ø[ˆ\ˆ[™ÙØ[]\]YØZÚØ[‹‚‚“İÛ™\ˆY[XZØH
+ŠXœÙ[œÚH™[[H]]\
+Šˆ]]H]Z[[™ÙØ[[XKY[™Ú\ÚH[™ÙØ[Ú˜[H[[™ÈÒPˆÙ\H[\Ø[‹ˆÙ\™\ˆY[Y\šZÜØH\˜[ˆİÛ™\‹\][ˆØZİKØZİHX\ØH\[‹˜]\È˜[K[ˆ™[\˜[ˆ[™Ø[ˆXœÙ[œÚH™\šZİ]XKˆÛÛ™š\›X\ÚHYZÈY[˜Ú\ZØ[ˆ›İÈ]]HÛÛÜ™[˜]ˆ[\Ø[‹RQİÛ™\‹ØZİHÛÛ™š\›X\ÚK™\]Y\İQ[ˆØZİH[[™È\œÚ[\[È™\]Y\İ[[™ÈY[ZÈYZÈY[™ÙØ[™ZØ[ˆ]Y]ˆØ]][ˆX[™ÈİYZÙ[\ØZHYZÈ\]][\H\šHš]\ˆ[šKˆ]Y]š]˜]]\\œÚ[\[ˆÙ][Z™\Ù]XœÙ[œÚK‚‚•\][ˆš[\Îˆ˜[[šØ[ˆZYÜ˜\ÚK\ŞHİÛ™\‹X\X˜\H\˜š]Ø[ˆœ›Û[™ˆZšH™YÜ™\ÚHİ\X˜\ÙKİ\İËØ][™[˜ÙWÜ™\ÛÛ][Û‹œÜ[Y[™Ùİ[˜ZØ[ˆš^\™H[ˆ›Û˜XÚËˆ˜[™Ø[ˆY[™X˜ZÈ˜[H[[™ÈØ\X]Ø[ÈİÛ™\ˆ\\ÈY[X\İZÚØ[ˆØZİHX[™È[ZZÛÛ™š\›X\ÚK‚‚]Y][š][ˆZYÜ˜\ÚH][™[˜ÙWÚ[[Øš[™[™ØY[™ÚZØ]\˜ÛØ˜X[ˆÕUÙH\™Ù]Ø][™[˜ÙWÚYˆZİH[XHYZÈ›ÛZY[]\Ù\ÚH˜\HÙ][ZİÛ™\ˆY[Y[\ØZZØ[ˆÙ\ÚH\Ø[ˆ\˜ÛØ˜X[ˆÕUÙX™[[HZYÜ˜\ÚHX[™È™[[HÙ[\ØZH\›H[][ZH[[™ÎÈ™XÙZ\X[™ÈİYZ\œÚ[\[ˆ]\š\ØHX˜XØKˆ™\\™H[ˆÛÛ[Z]Y[XZØZH\][ˆØÚÈØ\X]Ø[ˆX[™ÈØ[XH[ZÈY[™İ\˜[™ÚHXYØÚËˆ™YÜ™\ÚH][™[˜ÙWÚ[[Øš[™[™ËœÜ[Y[™İZšHÛÛ™š\›X\ÚHİÛ™\ˆH[\˜H™\\™KØÛÛ[Z][›ÛZØ[ˆZİH[XKÙ\H™]HZİH˜\H[œH\ZØ\ÚK‚‚ˆÈÈ[™ØZX[ˆÙZY\˜[ˆØ\X]Ø[‚‚’Ø\X]Ø[ˆ\]Y[™ØZZØ[ˆ[™ÙØ[Ù\š˜HÙ[X\š[ˆØ[\ZHZZ\šHÙX™[[[XK[ZÈX\İZÊÜ[[™ÈX[™È™[[H\˜Ø]]
+ÒQ•
+H]]H[[™ÈØZ˜HYHØ]][ˆX\İZÈX[™ÈİYZYH
+ÕU
+KˆØZİHY[™Ùİ[˜ZØ[ˆÒP‹YZÈ›ÛZHX\ØH\[‹[ˆ\˜\ÚHXZÜÚ[X[˜[KˆØ]H[™ØZX[ˆ[™[™È\ˆØ\X]Ø[‹İ[™ÙØ[È™]HQØ[XHYZÈY[™ÙØ[™ZØ[ˆ]Kˆš]Ø^X]Ø\X]Ø[ˆX˜]\ÚHÌ\˜˜\H[ˆ[XHX˜XØHY[[ZHÙ\ÚHX[™È˜[Y‚‚“İÛ™\ˆY[Z][™X[ˆXZÜÚ[X[L[™ØZX[ˆ\XH[ˆØZšXˆY[X™\šHØ]][ˆ[ZÈY[Y]ZZKÛY[›ÛZËˆ\œÙ]ZX[ˆY[Y\šZÜØH[[™ÈØ]][ˆ[ˆ™[\˜[ˆØZİKÙ\HY[˜Ø]]RQİÛ™\‹ØZİHÙ\]\Ø[‹[ˆ[\Ø[‹ˆ[›ÛZØ[ˆYZÈY[™İX˜Z][™[˜ÙKˆÒQ•\Ù]ZZHÙX˜YØZHØ]][ˆX[X[X[™È[™ÚØ\[œH›İËÑÔÈX][ÈÕUY[™Ùİ[˜ZØ[ˆ˜[œØZÜÚHÛÛ™š\›X\ÚH[[™ÈX[™ÈX]Y]ˆ\œ[™Z[ˆÚÛÈØX]ÒQ•[™[™ÈY[Y\›ZØ[ˆ[›ÛZØ[‹Ü[™ØZX[ˆ[[™ËˆYZÈYH[™İX˜Z[ˆØ]][ˆX[™ÈİYZ[™ÚØ\‚‚•X™[][™[˜ÙWÜ™\]Y\İØY[XZØZH“ÈÚ\İ\È˜XØHİÛ™\ÈØ\X]Ø[ˆY[XZØZH”È˜XÚÙ[™X[™ÈY[™ÚZØ]Y[]\ÈÙHÙ\ÚKZØ[ˆQ\šHœ›İÜÙ\‹ˆ˜[[šØ[ˆZYÜ˜\ÚH[H\ŞH][™[˜ÙKX\H[ˆİÛ™\‹X\HÙX™[[Hœ›Û[™ˆZšHİ\X˜\ÙKİ\İËØ][™[˜ÙWÜ™\]Y\İËœÜ[Y[˜ØZİ\[™[™Ë™\^K[›ÛZØ[‹\œÙ]ZX[ˆÒQ•ÓÕUİÜš\Ø\ÚK[ˆ[YÜš]\ÈZİK‚‚ˆÈÈİØÚÈÜ˜[YB‚•[ZÈš[\ÈÓÈ™\œØ[XK˜[[šØ[ˆZYÜ˜\ÚHŒŒLLŒMNM—ÜİØÚ×ÛÜ˜[YKœÜ[[‚˜ŒŒLLŒMLN—ÜÚ\™YÜİØÚ×ÛÜ˜[YKœÜ[Ù\İXZH\][ˆš]Ø^X]›ŞYZËˆ\ŞH[[™Â˜][™[˜ÙKX\X[ˆ\˜š]Ø[ˆœ›Û[™[[H™[™[Hš[\ÈX[™ÈØ[XKˆÛY[ˆÓÂ™\œÚH[XHZØ[ˆ[Z[HY[]X][[™È[[X[‹ˆÛÛ™šYİ\˜\ÚHÙ\ÚH[ˆÜšYÚ[ˆ]\Yİ[˜ZØ[‹‚‚’Ø][ÙÈ]Ø[ˆ˜\˜[™È[ˆ]\˜[ˆ[™Ú\ÚX[ˆ™\›ZİH[ZÈÙ[]XHÚÛËˆ˜[XHÚÛÂ™X[Xš[\šH[™[\][ˆØ\X]Ø[‹ˆÚ[\[ˆ\[XHY[XX]Ø]HÓÈ™\œØ[XH\‚ÚÛÈ\ˆ[™ÙØ[ÒPˆ[ˆY[™Ø[Xš[Û˜\ÚİØ][ÙÈ[ZÈ\šH]KˆØ\X]Ø[‚˜ZİYˆHÚÛÈ\œÙX]\]Y[Z[\[ˆÙX˜YÚX[ˆ[ˆY[\\˜˜\ZH\ÚX[ˆ\šH[šK‚”\X˜Z[ˆ][HX[™ÈØ[XH\›H][š˜]H[[™ÈšZØH™]š\Ú[XHİYZ™\˜™YK‚“˜[XHÛÛšX]Üˆ™\˜\Ø[\šHÙ\ÚH[Z˜[XH[ˆ™[[HY[]™\šYšZØ\ÚHY[]\ÈšX˜YK‚“İÛ™\ˆ\]Y[Z][™Ú\ÚK]šX\ÚH\ˆ][K[ˆš]Ø^X]\X˜Z[‹Ù\B›Y[™ÛÜ™ZÜÚH]]HY[™Ú\\È\Ü˜[‹ˆ\Ü˜[ˆ[™]šYHX[™ÈXšZ[XH]\š\ØB™XZØHÙX˜YØZH\İÜšH[ˆYZÈYØX[™ÈİÛX]\Ëˆ\X˜Z[ˆX\İ\ˆ™\›ZİB[ZÈÓÈ™\šZİ]XH[œHY[™İX˜ZÛ˜\Úİ\Ü˜[ˆX[™ÈİYZYK‚•[ZÈY[™Ú\\ÈØ]YÛÜšKÛÜÛÛ™ÚØ[ˆ[HØ]YÛÜšH\œÙX][™Ø[ˆY[Z[™ZØ[‚˜]]HY[™Ú\\È˜\˜[™ÛXKˆZÜÜÜˆY[™ÚZİ]Hš[\ˆ[™ÙØ[[ˆ˜[XHX[™È]\˜\Ø[‹‚‚’˜[[šØ[ˆİ\X˜\ÙKİ\İËÜİØÚ×ÛÜ˜[YKœÜ[[ˆİ\X˜\ÙKİ\İËÜÚ\™YÜİØÚ×ÛÜ˜[YKœÜ[™H]X˜\ÙHZšH[™Ø[ˆØ]HİÛ™\ˆX[™ÈİYZ\›İš\ÚZØ[‹ˆ\ÈY[™Ùİ[˜ZØ[ˆ˜[œØZÜÚBX[™ÈXZÚ\šH[™Ø[ˆ›Û˜XÚË‚
