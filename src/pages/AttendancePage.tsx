@@ -15,6 +15,7 @@ import type { Action, AttendanceStatus as Status, Employee, Store } from '../fea
 import { attendanceEmployees, attendanceStores, selectEmployee, demoMode, endAccount, forgetAccount, readSavedAccount, refreshStatus,
   saveAccount, savedAccountKey, SessionEnded } from '../features/attendance/api'
 import type { Account } from '../features/attendance/api'
+import { IssueLauncher } from '../features/issues/IssueLauncher'
 
 const EvidenceForm = lazy(() => import('../features/attendance/EvidenceForm').then(module => ({ default: module.EvidenceForm })))
 
@@ -204,7 +205,12 @@ export default function AttendancePage() {
 
   return (
     <>
-      <Header><Link className="button header-link" to="/owner/login">Masuk Owner</Link></Header>
+      <Header>
+        <div className="issue-header-actions">
+          {account?.token && <IssueLauncher key={account.employee.id} source={{ role: 'employee', token: account.token, page: '/' }} />}
+          <Link className="button header-link" to="/owner/login">Masuk Owner</Link>
+        </div>
+      </Header>
       <main className={'tea-shell' + (stage === 'capture' ? ' tea-shell-capture' : account ? ' tea-shell-account' : '')}>
         <TeaHero>
           <p className="tea-eyebrow"><span aria-hidden="true" />Teh Idaman · Tim Kedai</p>

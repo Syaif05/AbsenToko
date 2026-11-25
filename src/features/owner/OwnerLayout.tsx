@@ -3,6 +3,7 @@ import { NavLink, Outlet, Link, useLocation } from 'react-router'
 import { appName, Loading, Notice, errorMessage } from '../../components/ui/shared'
 import { loadBrand } from './api'
 import { displayDate, todayWib } from '../attendance/dates'
+import { OwnerIssueActions } from '../issues/OwnerIssueActions'
 import '../../styles/owner.css'
 
 const links = [
@@ -93,9 +94,10 @@ export default function OwnerLayout({ onLogout }: { onLogout: () => Promise<void
             <strong>{links.find(([to]) => to === location.pathname)?.[1] ?? 'Ruang Owner'}</strong>
           </div>
           <span className="owner-today">{displayDate(todayWib())} · WIB</span>
-          <span className="owner-account" aria-label="Akun Owner">
-            O
-          </span>
+          <div className="issue-owner-actions">
+            <OwnerIssueActions page={location.pathname.replace(/\/$/, '')} />
+            <span className="owner-account" aria-label="Akun Owner">O</span>
+          </div>
         </header>
         {error && <Notice tone="error">{error}</Notice>}
         <div id="owner-content" tabIndex={-1}>

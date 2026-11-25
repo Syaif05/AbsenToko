@@ -234,3 +234,22 @@ memastikan daftar barang dan tombol **Atur stok** muncul.
 Jalankan `supabase/tests/stock_opname.sql`, `supabase/tests/shared_stock_opname.sql`,
 dan `supabase/tests/stock_on_hand.sql` di database uji dengan satu Owner yang
 sudah diprovisikan. Tes menggunakan transaksi yang diakhiri dengan rollback.
+
+## Laporan masalah website
+
+Terapkan `20261125141346_website_issue_reports.sql`, deploy Edge Function
+`issue-reports` dengan `verify_jwt=false` untuk mendukung token Karyawan dan
+token Supabase Auth Owner, lalu terbitkan frontend. Handler memeriksa sesi
+Karyawan atau role Owner di server. Gunakan secret `ALLOWED_ORIGINS` yang sama
+seperti fungsi absensi. Untuk deploy melalui API, sertakan `index.ts` dan
+`deno.json` dengan `import_map_path: "deno.json"`.
+
+Bucket `website-issue-media` privat. Owner memperoleh tautan berumur 15 menit
+saat membuka laporan. CSP frontend harus mengizinkan origin Supabase di
+`img-src` dan `media-src` agar lampiran bisa dilihat dan diputar. Aktifkan
+`microphone=(self)` di `Permissions-Policy` agar browser dapat meminta izin
+saat pengguna menekan **Rekam suara**.
+
+Jalankan `supabase/tests/website_issue_reports.sql` di database uji dengan satu
+Owner yang sudah diprovisikan. Skrip cleanup yang sudah ada juga dapat
+membersihkan unggahan laporan yang belum selesai lebih dari 24 jam.

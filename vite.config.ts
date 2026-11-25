@@ -20,7 +20,7 @@ export default defineConfig(({ mode }) => {
   const csp = [
     "default-src 'self'", "script-src 'self'", "style-src 'self'",
     "img-src 'self' blob:" + (backendOrigin ? ' ' + backendOrigin : ''),
-    "media-src 'self' blob:", "connect-src 'self'" + (backendOrigin ? ' ' + backendOrigin : ''),
+    "media-src 'self' blob:" + (backendOrigin ? ' ' + backendOrigin : ''), "connect-src 'self'" + (backendOrigin ? ' ' + backendOrigin : ''),
     "object-src 'none'", "base-uri 'none'", "frame-ancestors 'none'", "form-action 'self'",
   ].join('; ')
 
@@ -32,7 +32,7 @@ export default defineConfig(({ mode }) => {
         'Referrer-Policy': 'no-referrer',
         'X-Content-Type-Options': 'nosniff',
         'X-Frame-Options': 'DENY',
-        'Permissions-Policy': 'camera=(self), geolocation=(self), microphone=()',
+        'Permissions-Policy': 'camera=(self), geolocation=(self), microphone=(self)',
       },
     },
   }

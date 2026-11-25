@@ -68,3 +68,7 @@ Karyawan yang aktif di toko yang sama mengisi satu laporan SO bersama per toko d
 Owner membuka **Manajemen & Laporan SO** untuk melihat progres, semua nama pengisi, riwayat perubahan, dan detail per barang. Owner dapat mengoreksi laporan serta mengunduh Excel atau CSV sesuai filter yang diterapkan. Laporan SO individu sebelum pembaruan tetap tampil sebagai histori terpisah. Nama pengisi mengikuti sesi pemilihan nama karyawan yang berlaku di aplikasi.
 
 Migrasi `supabase/migrations/20261120151846_shared_stock_opname.sql` harus tersedia di database bersama Edge Function `attendance-api` terbaru agar form SO dapat memuat dan menyimpan. Urutan rilis dan tes SQL dijelaskan dalam [panduan Supabase](supabase/README.md#stock-opname). Uji lokal dengan `npm run lint`, `npm run typecheck`, `npm test`, dan `npm run build`.
+
+## Laporan masalah website
+
+Setelah masuk, tekan ikon gelembung **Laporkan masalah** di header untuk melaporkan kendala. Tulis kronologi hingga 12.000 karakter, tambahkan hingga lima gambar JPG, PNG, atau WebP (4 MB per gambar), dan rekam suara opsional hingga 90 detik. Nomor laporan muncul setelah server mengonfirmasi penerimaan. Di Owner, ikon amplop membuka kotak masuk untuk melihat lampiran dan mengubah status. Lencana pada amplop menghitung laporan berstatus **Baru** dan diperbarui saat halaman aktif atau setelah perubahan status. [Setup layanan dan penyimpanan](supabase/README.md#laporan-masalah-website)

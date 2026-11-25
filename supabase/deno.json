@@ -4,6 +4,6 @@
     "strict": true
   },
   "tasks": {
-    "check": "deno check functions/attendance-api/index.ts functions/owner-api/index.ts scripts/cleanup.ts"
+    "check": "deno check functions/attendance-api/index.ts functions/owner-api/index.ts functions/issue-reports/index.ts scripts/cleanup.ts"
   }
 }

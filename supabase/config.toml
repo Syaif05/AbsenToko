@@ -7,3 +7,7 @@ verify_jwt = false
 [functions.owner-api]
 # Validasi JWT dilakukan dengan Auth getUser agar mendukung signing keys baru.
 verify_jwt = false
+
+[functions.issue-reports]
+# Handler memverifikasi sesi Karyawan dan token Supabase Auth Owner.
+verify_jwt = false

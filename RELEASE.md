@@ -13,11 +13,11 @@ Jalankan `npm ci && npm run build` dan publikasikan folder `dist` ke hosting sta
 Arahkan rute aplikasi seperti `/owner/login`, `/owner`, dan `/owner/reset` ke `index.html`. Sajikan aset dari path aslinya. Terapkan header berikut di hosting. Konfigurasi Vite sudah menyajikannya saat preview lokal. Ganti `https://PROJECT_REF.supabase.co` dengan origin backend.
 
 ```http
-Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: https://PROJECT_REF.supabase.co; media-src 'self' blob:; connect-src 'self' https://PROJECT_REF.supabase.co; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'
+Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: https://PROJECT_REF.supabase.co; media-src 'self' blob: https://PROJECT_REF.supabase.co; connect-src 'self' https://PROJECT_REF.supabase.co; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'
 Referrer-Policy: no-referrer
 X-Content-Type-Options: nosniff
 X-Frame-Options: DENY
-Permissions-Policy: camera=(self), geolocation=(self), microphone=()
+Permissions-Policy: camera=(self), geolocation=(self), microphone=(self)
 ```
 
 ## Penerimaan sebelum produksi
