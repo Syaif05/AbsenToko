@@ -65,26 +65,69 @@ export async function* stockExportRows(filters: StockFilters) {
   }
 }
 
-export async function stockMaster(signal: AbortSignal) {
-  const db = client()
-  const readCatalog = async <T>(table: string) => {
-    const rows: T[] = []
-    for (let from = 0; ; from += 500) {
-      const { data, error } = await db.from(table).select('*').order('sort_order').order('name').order('id')
-        .range(from, from + 499).abortSignal(signal).returns<T[]>()
-      if (error) throw new Error('Pengaturan Stock Opname gagal dimuat.')
-      rows.push(...data)
-      if (data.length < 500) return rows
-    }
+async function readRows<T>(buildPage: (from: number) => PromiseLike<{ data: T[] | null; error: unknown }>, message: string) {
+  const rows: T[] = []
+  for (let from = 0; ; from += 500) {
+    const { data, error } = await buildPage(from)
+    if (error || !data) throw new Error(message)
+    rows.push(...data)
+    if (data.length < 500) return rows
   }
+}
+
+function readCatalog<T>(table: 'so_categories' | 'so_items', signal: AbortSignal) {
+  return readRows<T>(from => client().from(table).select('*').order('sort_order').order('name').order('id')
+    .range(from, from + 499).abortSignal(signal).returns<T[]>(), 'Daftar barang SO belum bisa dimuat.')
+}
+
+export async function stockMaster(signal: AbortSignal) {
   const [categories, items, settings] = await Promise.all([
-    readCatalog<Category>('so_categories'),
-    readCatalog<MasterItem>('so_items'),
-    db.from('so_settings').select('guidelines_text,require_all_fields')
+    readCatalog<Category>('so_categories', signal),
+    readCatalog<MasterItem>('so_items', signal),
+    client().from('so_settings').select('guidelines_text,require_all_fields')
       .eq('id', 1).abortSignal(signal).returns<StockSettings[]>().single(),
   ])
   if (settings.error) throw new Error('Pengaturan Stock Opname gagal dimuat.')
   return { categories, items, settings: settings.data }
+}
+
+type StoredQuantity = [string, string | null]
+export type OnHand = {
+  item_id: string; quantity: StoredQuantity; unit_type: MasterItem['unit_type']; unit_label: string
+  units_per_box: number | null; updated_at: string
+}
+export type OnHandChange = {
+  id: number; item_name: string; unit_label: string; before_quantity: StoredQuantity | null; before_unit_label: string | null
+  quantity: StoredQuantity; actor_name: string; report_id: string | null; note: string; recorded_at: string
+}
+
+export class OnHandUnavailable extends Error {}
+
+export async function onHandDirectory(signal: AbortSignal) {
+  const [categories, items, stores] = await Promise.all([
+    readCatalog<Category>('so_categories', signal),
+    readCatalog<MasterItem>('so_items', signal),
+    readRows<{ id: string; name: string }>(from => client().from('stores').select('id,name').is('archived_at', null)
+      .order('name').order('id').range(from, from + 499).abortSignal(signal), 'Daftar toko belum bisa dimuat.'),
+  ])
+  const names = new Map(categories.filter(category => category.is_active).map(category => [category.id, category.name]))
+  return { stores, items: items.filter(item => item.is_active && names.has(item.category_id))
+    .map(item => ({ ...item, category_name: names.get(item.category_id)! })) }
+}
+
+export async function onHandStore(storeId: string, signal: AbortSignal) {
+  const [stock, history] = await Promise.all([
+    readRows<OnHand>(async from => {
+      const page = await client().from('so_on_hand').select('item_id,quantity,unit_type,unit_label,units_per_box,updated_at')
+        .eq('store_id', storeId).order('item_id').range(from, from + 499).abortSignal(signal).returns<OnHand[]>()
+      if (page.error?.code === 'PGRST205' || page.error?.code === '42P01') throw new OnHandUnavailable()
+      return page
+    }, 'Stock on hand belum bisa dimuat.'),
+    client().from('so_on_hand_history').select('id,item_name,unit_label,before_quantity,before_unit_label,quantity,actor_name,report_id,note,recorded_at')
+      .eq('store_id', storeId).order('id', { ascending: false }).limit(20).abortSignal(signal).returns<OnHandChange[]>(),
+  ])
+  if (history.error) throw new Error('Riwayat perubahan SOH belum bisa dimuat.')
+  return { stock, history: history.data }
 }
 
 export async function writeStockMaster(table: 'so_categories' | 'so_items', id: string, creating: boolean,

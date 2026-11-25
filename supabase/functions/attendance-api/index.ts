@@ -136,6 +136,20 @@ Deno.serve(async request => {
     const token = request.headers.get('authorization')?.replace(/^Bearer /, '')
     if (!token || !/^[0-9a-f]{64}$/.test(token)) throw new Failure(401, 'Pilih toko dan nama terlebih dahulu.')
     const hash = await digest(encoder.encode(token))
+    if (body.operation === 'stock_shared_check') {
+      if (!uuid(body.item_id) || !Array.isArray(body.values) || body.values.length !== 2 ||
+        !body.values.every((value: unknown) => typeof value === 'string' && value.length <= 24)) {
+        throw new Failure(400, 'Periksa format jumlah stok.')
+      }
+      await limit('soh-check:' + hash, 90, 60)
+      const { data, error } = await client.rpc('employee_check_stock_on_hand', {
+        p_hash: hash, p_item: body.item_id, p_quantity: body.values,
+      })
+      if (error?.message === 'invalid session') throw new Failure(401, 'Sesi berakhir. Masuk kembali.')
+      if (error?.message === 'so invalid value') throw new Failure(400, 'Periksa format jumlah stok.')
+      if (error) throw new Failure(503, 'Batas stok belum bisa diperiksa.')
+      return respond({ issue: data === 'soh exceeded' ? 'exceeded' : data === 'soh unit changed' ? 'unit' : null })
+    }
     await limit('session:' + hash, 30, 60)
     if (body.operation === 'stock_shared_form' || body.operation === 'stock_shared_save') {
       const saving = body.operation === 'stock_shared_save'
@@ -153,6 +167,10 @@ Deno.serve(async request => {
           p_date: body.date, p_changes: body.changes, p_note: body.notes }),
       })
       if (error?.message === 'invalid session') throw new Failure(401, 'Sesi berakhir. Masuk kembali.')
+      if (error && (error.message === 'soh exceeded' || error.message === 'soh unit changed') && uuid(error.details)) {
+        return respond({ code: 'STOCK_LIMIT', item_id: error.details,
+          issue: error.message === 'soh exceeded' ? 'exceeded' : 'unit' }, 422)
+      }
       if (error?.message === 'so item conflict' || error?.message === 'so stale form') {
         return respond({ code: 'STOCK_CONFLICT', error: 'SO sudah diperbarui. Muat ulang untuk membandingkan isian.' }, 409)
       }
@@ -163,7 +181,7 @@ Deno.serve(async request => {
         console.error('Shared SO RPC failed', error?.code)
         throw new Failure(503, 'Hasil penyimpanan belum dikonfirmasi. Coba lagi.')
       }
-      return respond(data)
+      return respond({ ...data, soh_checks: true })
     }
     if (['stock_form', 'stock_save', 'stock_receipt'].includes(body.operation)) {
       throw new Failure(409, 'SO sudah diperbarui. Muat ulang halaman untuk memakai SO bersama.')

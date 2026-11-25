@@ -5,7 +5,7 @@ import ts from 'typescript'
 import vm from 'node:vm'
 const { URL, Response, Request, Headers, TextDecoder, TextEncoder, crypto } = globalThis
 
-async function endpoint(invalidSession = false) {
+async function endpoint(invalidSession = false, stockResult) {
   let handler
   const calls = []
   const admin = {
@@ -13,6 +13,7 @@ async function endpoint(invalidSession = false) {
     rpc: async (name, args) => {
       calls.push({ name, args })
       if (name === 'attendance_take_limit') return { data: true }
+      if (stockResult && name.startsWith('employee_') && name.includes('stock')) return stockResult
       return invalidSession ? { error: { code: 'P0001', message: 'invalid session' } } : { data: { days: [] } }
     },
   }
@@ -31,6 +32,23 @@ test('schedule endpoint requires a session and valid month', async () => {
   assert.equal((await invoke({operation:'schedule',month:'2026-11'}, '')).status, 401)
   assert.equal((await invoke({operation:'schedule',month:'2026-13'})).status, 400)
   assert.equal(calls.filter(call => call.name === 'attendance_my_schedule').length, 0)
+})
+
+test('SOH warning exposes only the offending item and never the stored quantity', async () => {
+  const item = '10000000-0000-4000-8000-000000000001'
+  const check = await endpoint(false, { data: 'soh exceeded' })
+  const result = await check.invoke({ operation: 'stock_shared_check', item_id: item, values: ['31', ''], store_id: 'another' })
+  assert.equal(result.status, 200)
+  assert.deepEqual(await result.json(), { issue: 'exceeded' })
+  assert.deepEqual(Object.keys(check.calls.at(-1).args).sort(), ['p_hash', 'p_item', 'p_quantity'])
+
+  const save = await endpoint(false, { error: { message: 'soh exceeded', details: item, hint: 'internal data' } })
+  const rejected = await save.invoke({
+    operation: 'stock_shared_save', id: item, report_id: null, version: 'a'.repeat(32),
+    date: '2026-11-25', notes: '', changes: { [item]: { values: ['31', ''], revision: 0 } },
+  })
+  assert.equal(rejected.status, 422)
+  assert.deepEqual(await rejected.json(), { code: 'STOCK_LIMIT', item_id: item, issue: 'exceeded' })
 })
 test('schedule endpoint derives identity from hashed token, ignores supplied employee ID', async () => {
   const { invoke, calls } = await endpoint()

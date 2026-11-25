@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Dialog } from '../../components/ui/Dialog'
 import { Loading, Notice, errorMessage } from '../../components/ui/shared'
-import { employeeStock, SessionEnded, StockConflict } from '../attendance/api'
-import type { Account } from '../attendance/api'
+import { employeeStock, SessionEnded, StockConflict, StockLimit } from '../attendance/api'
+import type { Account, StockIssue } from '../attendance/api'
 import { displayDate } from '../attendance/dates'
 import { validQuantity } from './model'
 import type { Quantity, SharedStockItem, StockForm } from './model'
@@ -15,6 +15,10 @@ type Draft = { changes: Record<string, Edit>; notes: string; reportId: string | 
 const emptyDraft = (reportId: string | null = null): Draft => ({ changes: {}, notes: '', reportId })
 const savedValues = (item: SharedStockItem): Quantity => [item.values?.[0] ?? '', item.values?.[1] ?? '']
 const sameQuantity = (a: Quantity, b: Quantity) => a[0].trim() === b[0].trim() && a[1].trim() === b[1].trim()
+const limitMessage: Record<StockIssue, string> = {
+  exceeded: 'Jumlah melebihi stok yang tersedia.',
+  unit: 'Satuan stok berubah. Hubungi Owner.',
+}
 
 function draftKey(account: Account, form: StockForm) {
   return `teh-idaman:so:${import.meta.env.VITE_SUPABASE_URL}:${account.employee.id}:${form.report_date}:${form.version}`
@@ -51,11 +55,13 @@ export default function EmployeeStock({ account, onClose, onSessionEnded }: {
   const [refreshing, setRefreshing] = useState(true)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [stockIssues, setStockIssues] = useState<Record<string, { edit: Edit; issue: StockIssue }>>({})
   const [revision, setRevision] = useState(0)
   const [storageUnavailable, setStorageUnavailable] = useState(false)
   const list = useRef<HTMLDivElement>(null)
   const request = useRef<{ id: string; key: string } | null>(null)
   const submitting = useRef(false)
+  const checkVersion = useRef(0)
   const draftRef = useRef<{ key: string; draft: Draft } | null>(null)
 
   useEffect(() => {
@@ -118,10 +124,42 @@ export default function EmployeeStock({ account, onClose, onSessionEnded }: {
     if (sameQuantity(values, savedValues(item))) delete next[item.id]
     else next[item.id] = { values, revision: acceptLatestRevision ? (item.revision ?? 0) : (next[item.id]?.revision ?? item.revision ?? 0) }
     updateDraft({ ...draft, changes: next })
+    if (stockIssues[item.id]) {
+      setStockIssues(previous => {
+        const updated = { ...previous }
+        delete updated[item.id]
+        return updated
+      })
+      setError('')
+    }
     setMessage('')
   }
 
+  async function checkStock(item: SharedStockItem) {
+    const edit = draftRef.current?.draft.changes[item.id]
+    if (!form?.soh_checks || submitting.current || refreshing || !edit
+      || !validQuantity(edit.values, item.unit_type === 'combined', true)) return
+    const version = checkVersion.current
+    try {
+      const { issue } = await employeeStock<{ issue: StockIssue | null }>(account, 'stock_shared_check', {
+        item_id: item.id, values: edit.values.map(value => value.trim()),
+      })
+      if (version !== checkVersion.current || draftRef.current?.draft.changes[item.id] !== edit) return
+      setStockIssues(previous => {
+        const next = { ...previous }
+        if (issue) next[item.id] = { edit, issue }
+        else delete next[item.id]
+        return next
+      })
+    } catch (cause) {
+      if (cause instanceof SessionEnded && version === checkVersion.current) onSessionEnded(cause.message)
+      // Save always validates the latest SOH, including when this preview is unavailable.
+    }
+  }
+
   function reload() {
+    checkVersion.current++
+    setStockIssues({})
     setRefreshing(true)
     setError('')
     setRevision(previous => previous + 1)
@@ -138,6 +176,7 @@ export default function EmployeeStock({ account, onClose, onSessionEnded }: {
       return
     }
     submitting.current = true
+    checkVersion.current++
     setBusy(true)
     setError('')
     setMessage('')
@@ -151,11 +190,21 @@ export default function EmployeeStock({ account, onClose, onSessionEnded }: {
       const next = await employeeStock<StockForm>(account, 'stock_shared_save', { ...fields, id: request.current.id })
       setForm(next)
       updateDraft(emptyDraft(next.report_id), next)
+      setStockIssues({})
       setAttempted(false)
       setMessage('Perubahan tersimpan. Tim bisa melanjutkan SO ini.')
     } catch (cause) {
       if (cause instanceof SessionEnded) onSessionEnded(cause.message)
-      else if (cause instanceof StockConflict) {
+      else if (cause instanceof StockLimit) {
+        const item = items.find(entry => entry.id === cause.itemId)
+        if (item && changes[item.id]) {
+          setStockIssues(previous => ({ ...previous, [item.id]: { edit: changes[item.id], issue: cause.issue } }))
+          setSearch('')
+          setCategory(item.category_id)
+          requestAnimationFrame(() => list.current?.querySelector<HTMLInputElement>('[aria-invalid="true"]')?.focus())
+        }
+        setError(item ? item.name + ' · ' + limitMessage[cause.issue] : limitMessage[cause.issue])
+      } else if (cause instanceof StockConflict) {
         reload()
         setMessage('Ada pembaruan dari tim. Periksa isian sebelum menyimpan kembali.')
       } else setError(errorMessage(cause, 'Hasil penyimpanan belum dikonfirmasi. Coba lagi.'))
@@ -215,7 +264,9 @@ export default function EmployeeStock({ account, onClose, onSessionEnded }: {
             </div>
             <div className="stock-compact-list" ref={list}>
               {shown.map(item => <CompactStockInput key={item.id} item={item} value={changes[item.id]?.values ?? savedValues(item)}
-                invalid={attempted && invalid.includes(item)} credit={item.last_editor} onChange={value => change(item, value)} />)}
+                invalid={attempted && invalid.includes(item)} credit={item.last_editor}
+                issue={stockIssues[item.id]?.edit === changes[item.id] && stockIssues[item.id] ? limitMessage[stockIssues[item.id].issue] : undefined}
+                onChange={value => change(item, value)} onCommit={() => void checkStock(item)} />)}
             </div>
             {searching && matches.length > 8 && !showMore && <button type="button" className="button button-quiet"
               onClick={() => setShowMore(true)}>Lihat semua {matches.length} hasil</button>}

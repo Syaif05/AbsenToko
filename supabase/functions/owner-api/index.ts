@@ -82,6 +82,26 @@ Deno.serve(async (request) => {
     if (!limit.data)
       return respond({ error: 'Terlalu banyak permintaan. Coba lagi sebentar.' }, 429)
 
+    if (operation === 'stock_set_on_hand') {
+      if (typeof body.store_id !== 'string' || !uuid.test(body.store_id)
+        || !Array.isArray(body.values) || body.values.length !== 2
+        || !body.values.every((value: unknown) => typeof value === 'string' && value.length <= 24)
+        || (body.units_per_box !== null && (!Number.isInteger(body.units_per_box) || body.units_per_box < 1 || body.units_per_box > 999999))
+        || (body.version !== null && (typeof body.version !== 'string' || !Number.isFinite(Date.parse(body.version))))
+        || typeof body.note !== 'string' || body.note.length > 160) {
+        return respond({ error: 'Periksa jumlah, satuan, dan catatan stok.' }, 400)
+      }
+      const { data, error } = await admin.rpc('owner_set_stock_on_hand', {
+        p_owner: user.id, p_store: body.store_id, p_item: id, p_quantity: body.values,
+        p_units_per_box: body.units_per_box, p_updated_at: body.version, p_note: body.note,
+      })
+      if (error?.message === 'soh changed') return respond({ error: 'Stok sudah berubah. Muat ulang sebelum menyimpan.' }, 409)
+      if (error?.message === 'soh inactive') return respond({ error: 'Toko atau barang sudah tidak aktif.' }, 409)
+      if (error?.message === 'so invalid value') return respond({ error: 'Periksa jumlah, satuan, dan catatan stok.' }, 400)
+      if (error || data?.ok !== true) return respond({ error: 'Penyimpanan stok belum dikonfirmasi. Coba lagi.' }, 503)
+      return respond({ ok: true })
+    }
+
     if (operation === 'stock_edit' || operation === 'stock_delete') {
       const deleting = operation === 'stock_delete'
       if (typeof body.version !== 'string' || !Number.isFinite(Date.parse(body.version))

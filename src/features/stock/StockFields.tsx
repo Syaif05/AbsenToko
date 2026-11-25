@@ -1,30 +1,36 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { Notice } from '../../components/ui/shared'
 import { displayStockQuantity, groupStockItems, statusLabels, whatsappStock } from './model'
 import type { Quantity, StockItem, StockReceipt } from './model'
 import { displayTime } from '../attendance/dates'
 import './stock.css'
 
-export function CompactStockInput({ item, value, onChange, invalid, credit }: {
-  item: StockItem; value: Quantity; onChange: (value: Quantity) => void; invalid: boolean; credit?: string | null
+export function CompactStockInput({ item, value, onChange, onCommit, invalid, issue, credit }: {
+  item: StockItem; value: Quantity; onChange: (value: Quantity) => void; invalid: boolean
+  onCommit?: () => void; issue?: string; credit?: string | null
 }) {
+  const errorId = useId()
   const combined = item.unit_type === 'combined'
-  return <div className={'stock-compact-row' + (combined ? ' stock-compact-combined' : '')}>
+  const error = issue || (invalid ? (combined
+    ? 'Isi kedua kolom dengan bilangan bulat atau tanda -.'
+    : 'Gunakan angka, pecahan, atau tanda -.') : '')
+  return <div className={'stock-compact-row' + (combined ? ' stock-compact-combined' : '')}
+    onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) onCommit?.() }}>
     <div className="stock-compact-name"><strong>{item.name}</strong>
       {!combined && <small className="muted">{item.unit_label}</small>}
       {credit && <small className="muted">Terakhir: {credit}</small>}
     </div>
-    {invalid && <small className="stock-invalid stock-item-error" role="alert">
-      {combined ? 'Isi kedua kolom dengan bilangan bulat atau tanda -.' : 'Gunakan angka, pecahan, atau tanda -.'}
-    </small>}
+    {error && <small id={errorId} className="stock-invalid stock-item-error" role="alert">{error}</small>}
     <div className={'stock-compact-values' + (combined ? ' stock-pair' : '')}>
       <label>
         <input type="text" autoComplete="off" maxLength={24} aria-label={item.name + ' dalam ' + (combined ? 'kardus' : item.unit_label)}
-          aria-invalid={invalid} value={value[0]} placeholder="—" onChange={e => onChange([e.target.value, value[1]])} />
+          aria-invalid={!!error} aria-describedby={error ? errorId : undefined}
+          value={value[0]} placeholder="—" onChange={e => onChange([e.target.value, value[1]])} />
         {combined && <small className="muted">kardus</small>}
       </label>
       {combined && <label>
-        <input type="text" autoComplete="off" maxLength={24} aria-label={item.name + ' dalam pcs'} aria-invalid={invalid}
+        <input type="text" autoComplete="off" maxLength={24} aria-label={item.name + ' dalam pcs'}
+          aria-invalid={!!error} aria-describedby={error ? errorId : undefined}
           value={value[1]} placeholder="—" onChange={e => onChange([value[0], e.target.value])} />
         <small className="muted">pcs</small>
       </label>}

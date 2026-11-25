@@ -95,6 +95,22 @@ const request = {
   request_id: '20000000-0000-4000-8000-000000000001',
   name: 'Toko Uji',
 }
+
+test('SOH adjustment binds the verified Owner and rejects stale or invalid input', async () => {
+  const adjustment = {
+    operation: 'stock_set_on_hand', id: request.id, store_id: request.request_id,
+    values: ['30', ''], units_per_box: null, version: null, note: 'Restok', owner: 'another-owner',
+  }
+  const denied = await endpoint({ nonOwner: true })
+  assert.equal((await denied.invoke(adjustment)).status, 403)
+  assert.equal(denied.calls.length, 0)
+  const stale = await endpoint({ rpcResult: { error: { message: 'soh changed' } } })
+  assert.equal((await stale.invoke({ ...adjustment, units_per_box: 0 })).status, 400)
+  assert.equal((await stale.invoke(adjustment)).status, 409)
+  const [write] = stale.calls.filter(call => call.name === 'owner_set_stock_on_hand')
+  assert.equal(write.args.p_owner, 'owner')
+  assert.equal(write.args.p_store, adjustment.store_id)
+})
 test('owner endpoint rejects unauthenticated and non-owner requests before writes', async () => {
   const anonymous = await endpoint()
   assert.equal((await anonymous.invoke(request, false)).status, 401)

@@ -15,6 +15,7 @@ export type StockForm = {
   employee_name: string; store_name: string; report_date: string; version: string
   report_id: string | null; requires_all: boolean; items: SharedStockItem[]
   contributors: string[]; guidelines: string
+  soh_checks?: boolean
 }
 export type StockReport = {
   id: string; employee_name: string; store_name: string; report_date: string

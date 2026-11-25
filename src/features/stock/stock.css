@@ -99,3 +99,42 @@
 .stock-history-entry summary { min-height: 44px; cursor: pointer; padding-block: .4rem; }
 .stock-history-entry ul { padding-inline-start: 1.3rem; }
 .stock-progress { width: 100%; height: .4rem; accent-color: var(--green); }
+
+.soh-heading, .soh-panel {
+  border: 1px solid var(--border);
+  border-radius: 1.15rem;
+  padding: clamp(.8rem, 2.3vw, 1.35rem);
+  background: var(--surface);
+}
+.soh-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(12rem, 17rem);
+  align-items: center;
+  gap: 1rem;
+  background: linear-gradient(115deg, var(--mint), var(--surface) 65%);
+}
+.soh-heading .stack { gap: .3rem; }
+.soh-heading h2 { font-size: clamp(1.4rem, 3.5vw, 2rem); }
+.soh-heading p { max-width: 54ch; }
+.soh-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .65rem; }
+.soh-stats > div { display: grid; gap: .3rem; border: 1px solid var(--border); border-radius: .9rem; padding: .75rem; background: var(--surface); }
+.soh-stats span { color: var(--muted); }
+.soh-stats strong { font-size: 1.55rem; line-height: 1; color: var(--green-dark); font-variant-numeric: tabular-nums; }
+.soh-tools { display: grid; grid-template-columns: minmax(0, 1fr) minmax(9rem, 12rem) auto; gap: .6rem; align-items: end; }
+.soh-tools input, .soh-tools select, .soh-heading select { width: 100%; min-width: 0; }
+.soh-list { list-style: none; margin: 0; padding: 0; }
+.soh-item {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(8rem, 1fr) auto; align-items: center;
+  gap: .65rem; padding: .65rem 0; border-top: 1px solid var(--border); overflow-wrap: anywhere;
+}
+.soh-item small { display: block; color: var(--muted); }
+.soh-item > button { justify-self: end; }
+.soh-amount strong { font-size: 1rem; font-variant-numeric: tabular-nums; }
+.soh-history summary { cursor: pointer; font-weight: 700; min-height: 44px; align-content: center; }
+.soh-history-item { grid-template-columns: repeat(2, minmax(0,1fr)); }
+@media (max-width: 600px) {
+  .soh-heading, .soh-tools { grid-template-columns: minmax(0, 1fr); }
+  .soh-item:not(.soh-history-item) { grid-template-columns: minmax(0, 1fr) auto; }
+  .soh-item > .soh-amount { grid-row: 2; }
+  .soh-item > button { grid-column: 2; grid-row: 1 / 3; }
+}
