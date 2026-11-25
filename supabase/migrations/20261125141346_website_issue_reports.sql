@@ -30,7 +30,7 @@ create policy website_issue_owner_read on public.website_issues for select to au
   ));
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('website-issue-media','website-issue-media',false,4194304,
+values ('website-issue-media','website-issue-media',false,6291456,
   array['image/jpeg','image/png','image/webp','audio/webm','audio/ogg','audio/mp4']);
 create policy issue_media_deny_direct_access on storage.objects
   as restrictive for all to anon,authenticated

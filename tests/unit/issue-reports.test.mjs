@@ -134,3 +134,11 @@ test('Owner can submit a text-only issue from the current Owner page', async () 
   assert.equal(rows.get(id).page, '/owner/stock-opname')
   assert.equal(files.size, 0)
 })
+
+test('long recordings fit the audio limit while recordings over 6 MiB are rejected', async () => {
+  const { invoke, files } = await setup()
+  const recording = size => new File([audio, new Uint8Array(size - audio.size)], 'uji.webm', { type: 'audio/webm' })
+  assert.equal((await invoke(report([], recording(6 * 1024 * 1024 + 1)))).status, 400)
+  assert.equal((await invoke(report([], recording(5 * 1024 * 1024)))).status, 200)
+  assert.equal([...files.values()][0].size, 5 * 1024 * 1024)
+})

@@ -10,7 +10,8 @@ export type Issue = {
 export type IssueAttachment = { kind: 'image' | 'audio'; url: string }
 export const maxImages = 5
 export const imageBytes = 4 * 1024 * 1024
-export const audioBytes = 3 * 1024 * 1024
+export const audioBytes = 6 * 1024 * 1024
+export const audioMinutes = 5
 export const descriptionLimit = 12000
 export const pageSize = 15
 
@@ -38,7 +39,12 @@ async function issueCall<T>(body: FormData | Record<string, unknown>, source: Is
   const response = await fetch(new URL('/functions/v1/issue-reports', url), {
     method: 'POST', headers, body: multipart ? body : JSON.stringify(body),
     signal: signal ? AbortSignal.any([signal, timeout]) : timeout, cache: 'no-store', redirect: 'error',
-  }).catch(() => { throw new Error('Koneksi terputus. Periksa koneksi lalu coba lagi.') })
+  }).catch(() => {
+    if (timeout.aborted) throw new Error('Pengiriman terlalu lama. Coba lagi dengan koneksi yang lebih stabil.')
+    if (!navigator.onLine) throw new Error('Perangkat sedang offline. Sambungkan internet dan kirim ulang.')
+    throw new Error('Layanan laporan tidak dapat dihubungi. Isian masih ada dan bisa dikirim ulang.')
+  })
+  if (response.status === 404) throw new Error('Layanan laporan belum tersedia. Hubungi Owner jika pesan ini berulang.')
   if (response.status === 401) throw new Error('Sesi berakhir. Masuk kembali untuk menggunakan laporan masalah.')
   const result = await response.json().catch(() => null)
   if (!response.ok || !result) {

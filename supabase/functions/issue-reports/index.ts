@@ -8,7 +8,7 @@ const bucket = admin.storage.from('website-issue-media')
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const ownerPages = ['/owner', '/owner/karyawan', '/owner/toko', '/owner/jadwal', '/owner/stock-opname', '/owner/pengaturan']
 const maxImage = 4 * 1024 * 1024
-const maxAudio = 3 * 1024 * 1024
+const maxAudio = 6 * 1024 * 1024
 const maxRequest = 5 * maxImage + maxAudio + 100_000
 const leaseMs = 10 * 60 * 1000
 

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Notice } from '../../components/ui/shared'
-import { audioBytes } from './api'
+import { audioBytes, audioMinutes } from './api'
 
-const duration = 90
+const duration = audioMinutes * 60
 const formats = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus']
 
 type Voice = { file: File; url: string }
@@ -84,7 +84,7 @@ export function VoiceCapture({ voice, onVoice, onActive }: {
       pending.current = null
       stopTracks.current = closeStream
       const mimeType = formats.find(type => MediaRecorder.isTypeSupported(type))
-      const next = new MediaRecorder(stream, mimeType ? { mimeType, audioBitsPerSecond: 48_000 } : undefined)
+      const next = new MediaRecorder(stream, { mimeType, audioBitsPerSecond: 48_000 })
       recorder.current = next
       const chunks: Blob[] = []
       let failed = false
@@ -136,7 +136,7 @@ export function VoiceCapture({ voice, onVoice, onActive }: {
   }
 
   return <div className="issue-voice stack">
-    <div className="issue-attachment-head"><strong>Rekaman suara</strong><small>Opsional · maks. 90 detik</small></div>
+    <div className="issue-attachment-head"><strong>Rekaman suara</strong><small>Opsional · maks. {audioMinutes} menit</small></div>
     {error && <Notice tone="warning">{error}</Notice>}
     {voice ? <>
       <audio src={voice.url} controls preload="metadata" aria-label="Putar rekaman sebelum mengirim" />
