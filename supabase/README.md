@@ -215,7 +215,7 @@ Untuk menghapus kategori, kosongkan dulu kategori tersebut dengan memindahkan
 atau menghapus barangnya. Ekspor mengikuti filter tanggal dan nama yang diterapkan.
 
 Untuk menambahkan Stock on hand (SOH), terapkan
-`20261125130850_stock_on_hand.sql`, deploy ulang `attendance-api` dan `owner-api`,
+`20261125135152_stock_on_hand.sql`, deploy ulang `attendance-api` dan `owner-api`,
 lalu terbitkan frontend. SOH diatur per toko dan barang. Karyawan memperoleh
 peringatan tanpa angka batas. SO berikutnya memakai hitungan terakhir, sementara
 koreksi pada SO yang sama memakai batas sebelum hitungan pertama atau setelah
@@ -225,6 +225,11 @@ sedangkan `-` atau `0` mencatat stok habis. Edit atau hapus laporan historis
 tidak mengubah saldo berjalan. Untuk menyesuaikan saldo, gunakan menu SOH.
 Jika frontend terbit lebih dulu, SO biasa tetap tersedia. Tab SOH menunjukkan
 status belum aktif hingga migrasi diterapkan.
+
+Jika memakai API deploy Edge Function, sertakan `index.ts` dan `deno.json`
+di paket kedua fungsi, lalu set `import_map_path` ke `deno.json`. Setelah
+rilis, cek versi migrasi dan status kedua fungsi, lalu buka tab SOH untuk
+memastikan daftar barang dan tombol **Atur stok** muncul.
 
 Jalankan `supabase/tests/stock_opname.sql`, `supabase/tests/shared_stock_opname.sql`,
 dan `supabase/tests/stock_on_hand.sql` di database uji dengan satu Owner yang
