@@ -237,7 +237,7 @@ sudah diprovisikan. Tes menggunakan transaksi yang diakhiri dengan rollback.
 
 ## Laporan masalah website
 
-Terapkan `20261125141346_website_issue_reports.sql`, deploy Edge Function
+Terapkan `20261126005342_website_issue_reports.sql`, deploy Edge Function
 `issue-reports` dengan `verify_jwt=false` untuk mendukung token Karyawan dan
 token Supabase Auth Owner, lalu terbitkan frontend. Handler memeriksa sesi
 Karyawan atau role Owner di server. Gunakan secret `ALLOWED_ORIGINS` yang sama
@@ -253,3 +253,7 @@ saat pengguna menekan **Rekam suara**.
 Jalankan `supabase/tests/website_issue_reports.sql` di database uji dengan satu
 Owner yang sudah diprovisikan. Skrip cleanup yang sudah ada juga dapat
 membersihkan unggahan laporan yang belum selesai lebih dari 24 jam.
+
+Verifikasi produksi 26 November 2026: migrasi `website_issue_reports` dan Edge Function
+`issue-reports` telah diterapkan. Push frontend ke GitHub tidak otomatis menerapkan
+migrasi atau Edge Function Supabase; keduanya harus diterapkan sebelum fitur digunakan.
